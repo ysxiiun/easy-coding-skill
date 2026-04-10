@@ -20,6 +20,7 @@
 - 交流语言：简体中文
 - 阶段标注格式：`[阶段：XXXX]`（中文冒号）
 - 7 阶段：INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → MEMORY_SHORT → MEMORY_LONG → COMPLETE
+- 若用户消息开头包含 `#no-coding`，则该轮跳过 easy-coding 全部流程与约束，下一轮恢复正常
 
 ## Git 忽略
 
