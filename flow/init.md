@@ -1,14 +1,42 @@
 # 初始化流程
 
-> 本文件由 SKILL.md 渐进式加载执行
-> 当用户确认开始初始化后触发
+> 本文件由 `SKILL.md` 按需加载执行。
+> 支持两种语义：常规初始化 `interactive_init` 与初创项目第一版完成后的初始化回补 `post_v1_auto_init`。
 
 ---
 
 ## 进入条件
 
-- SKILL.md 检测到项目初始化不完全
-- 用户明确回复"确认"开始初始化
+- `interactive_init`
+  - 项目被判定为 `迭代项目`
+  - `.easy-coding/` 资产不完整
+  - 用户明确回复“确认”开始初始化
+- `post_v1_auto_init`
+  - 项目被判定为 `初创项目`
+  - 第一版开发已经完成并得到用户确认
+  - 需要自动补齐 `.easy-coding/` 基础资产并生成项目摘要
+
+---
+
+## 模式差异
+
+| 维度 | interactive_init | post_v1_auto_init |
+|---|---|---|
+| 触发时机 | 首次使用或迭代项目补齐资产 | 初创项目第一版开发完成后 |
+| 交互方式 | 逐步展示并与用户确认 | 自动执行，不再逐文件二次确认 |
+| 信息来源 | 项目现状 + 用户补充 | 已生成代码 + Spec + Prototype + 项目现状 |
+| 覆盖策略 | 创建或更新缺失资产 | 回补基础资产，不覆盖已确认成果 |
+
+---
+
+## 执行原则
+
+1. 只补齐 `.easy-coding/` 基础资产，不改写业务代码。
+2. 回补初始化时，不覆盖以下内容：
+   - `.easy-coding/spec/` 下已有 Spec
+   - `.easy-coding/prototype/` 下已有 Prototype 与 HTML
+   - 用户已确认的代码成果
+3. 若以 `post_v1_auto_init` 运行，`ABSTRACT.md` 必须结合“现有代码 + Spec + Prototype”生成，而不是按空项目逻辑草率创建。
 
 ---
 
@@ -31,240 +59,102 @@
 
 ### 步骤 1：创建目录结构
 
-**创建以下目录：**
-```
+创建以下目录：
+
+```text
 .easy-coding/
 └── memory/
     ├── short/
     └── long/
 ```
 
-**详细步骤：**
-1. 使用 `mkdir -p` 创建 `.easy-coding/memory/short/`
-2. 使用 `mkdir -p` 创建 `.easy-coding/memory/long/`
-3. 使用 `list_dir` 验证目录创建成功
-
-**完成反馈：**
-```
-✅ 步骤 1/5 完成：目录结构创建
-   - .easy-coding/ ✅
-   - .easy-coding/memory/short/ ✅
-   - .easy-coding/memory/long/ ✅
-```
+详细步骤：
+1. 创建 `.easy-coding/memory/short/`
+2. 创建 `.easy-coding/memory/long/`
+3. 验证目录创建成功
 
 ---
 
 ### 步骤 2：初始化 SOUL.md
 
-**来源：** `templates/SOUL.md`
+来源：`templates/SOUL.md`
 
-**详细步骤：**
-1. 使用 `read_file` 读取 `templates/SOUL.md`
-2. 拷贝内容到 `.easy-coding/SOUL.md`
-3. 根据项目信息填充以下内容：
-   - **项目名称**：从项目目录名或用户确认获取
-   - **主要技术栈**：通过 `list_dir` 和文件检测推断（pom.xml=Java, package.json=Node, go.mod=Go 等）
-   - **团队约定**：询问用户或留空待后续填充
-   - **禁止事项**：询问用户或留空待后续填充
-4. 使用 `search_replace` 填充模板变量
-5. 向用户展示填充后的 SOUL.md 内容
-6. 询问用户："SOUL.md 内容是否准确？（回复'确认'或提出修改）"
-
-**用户确认后：**
-- 若用户提出修改 → 更新内容 → 重新确认
-- 若用户确认 → 进入步骤 3
-
-**完成反馈：**
-```
-✅ 步骤 2/5 完成：SOUL.md 初始化
-   文件：.easy-coding/SOUL.md
-   状态：已创建并填充
-```
+执行要求：
+1. 读取模板并写入 `.easy-coding/SOUL.md`
+2. 推断并填充项目名称、技术栈、团队约定、禁止事项
+3. `interactive_init` 模式下向用户展示并确认
+4. `post_v1_auto_init` 模式下自动生成，并在完成报告中统一摘要说明
 
 ---
 
 ### 步骤 3：初始化 RULES.md
 
-**来源：** `templates/RULES.md`
+来源：`templates/RULES.md`
 
-**详细步骤：**
-1. 使用 `read_file` 读取 `templates/RULES.md`
-2. **检测项目编程语言：**
-   - 检查 `pom.xml` / `build.gradle` / `*.java` → Java/Kotlin
-   - 检查 `requirements.txt` / `setup.py` / `*.py` → Python
-   - 检查 `package.json` / `*.js` / `*.ts` → JavaScript/TypeScript
-   - 检查 `go.mod` / `*.go` → Go
-   - 检查 `Cargo.toml` / `*.rs` → Rust
-   - 其他 → 通用规范
-3. 根据检测到的语言，选择对应规范填充：
-   - **Java**：UpperCamelCase 类名、@Slf4j 日志、Javadoc 注释
-   - **Python**：PEP8、snake_case、docstring
-   - **Go**：驼峰命名、显式 error 处理
-   - **JS/TS**：camelCase、JSDoc/TSDoc
-   - **通用**：通用命名规范、通用注释要求
-4. 拷贝并填充到 `.easy-coding/RULES.md`
-5. 向用户展示语言检测结果和规范概要
-6. 询问用户："检测到的语言是 {语言}，规范是否适用？（回复'确认'或提出修改）"
-
-**用户确认后：**
-- 若语言检测有误 → 重新检测 → 重新确认
-- 若用户确认 → 进入步骤 4
-
-**完成反馈：**
-```
-✅ 步骤 3/5 完成：RULES.md 初始化
-   文件：.easy-coding/RULES.md
-   检测语言：{语言}
-   状态：已创建并填充
-```
+执行要求：
+1. 检测项目语言与主要技术栈
+2. 生成对应语言的基础编码规范
+3. `interactive_init` 模式下展示语言检测结果并等待确认
+4. `post_v1_auto_init` 模式下自动填充，不额外阻断
 
 ---
 
-### 步骤 4：初始化 ABSTRACT.md（支持空项目）
+### 步骤 4：初始化 ABSTRACT.md
 
-**来源：** 根据项目实际分析生成
+来源：根据项目实际分析生成
 
-#### 4.1 项目扫描
+#### 4.1 分析输入
 
-**扫描结果检测：**
-```
-□ 有源码文件（src/, app/, lib/ 下有.java/.py/.js 等）
-□ 仅有配置文件（package.json/pom.xml/go.mod）
-□ 几乎为空（只有 README 或.gitignore）
-```
+- 项目代码与目录结构
+- 配置文件与构建文件
+- `.easy-coding/spec/Architect-Spec.md`
+- `.easy-coding/spec/Product-Spec.md`
+- `.easy-coding/spec/UI-Spec.md`
+- `.easy-coding/prototype/Easy-UI-Prototype.md`
+- Prototype 文档中引用的 HTML 原型文件
 
-#### 4.2 根据结果分支处理
+#### 4.2 生成原则
 
-**情况 A：有源码文件（完整初始化）**
+**有源码文件时：**
+- 生成完整架构摘要
+- 说明核心模块、技术栈、流程、目录索引
 
-1. **扫描项目结构：**
-   - `list_dir` 项目根目录
-   - 识别主要模块（src/, app/, lib/ 等）
-   - 识别配置文件（推断技术栈）
-2. **读取核心源码：**
-   - 读取所有核心源文件
-   - 理解项目主要功能
-3. **分析生成内容：**
-   - **项目定位**：一句话描述项目是什么
-   - **模块结构**：表格形式列出模块、职责、路径
-   - **核心业务流程**：所有关键流程
-   - **技术栈**：主要技术框架列表
-   - **目录索引**：关键功能 → 路径映射
-4. 生成内容写入 `.easy-coding/ABSTRACT.md`
-5. 向用户展示生成的架构摘要
-6. 询问用户："架构分析是否准确？（回复'确认'或提出修改意见）"
+**仅有配置文件时：**
+- 生成简化版摘要
+- 标明模块结构与核心流程待首次任务补充
 
-**用户确认后：**
-- 若用户提出修改 → 更新内容 → 重新确认
-- 若用户确认 → 进入步骤 5
+**几乎为空时：**
+- 生成最简版摘要
+- 标明项目待初始化与后续补充项
 
-**完成反馈：**
-```
-✅ 步骤 4/5 完成：ABSTRACT.md 初始化（完整版）
-   文件：.easy-coding/ABSTRACT.md
-   项目定位：{一句话描述}
-   状态：已生成并确认
-```
+**post_v1_auto_init 特别要求：**
+- 必须优先吸收第一版代码成果和 Spec 结论
+- 必须把 Prototype 视为参考输入，而非生产实现
+- 不得因回补初始化而回退已确认实现
 
----
+#### 4.3 交互要求
 
-**情况 B：仅有配置文件（简化初始化）**
-
-1. 根据配置文件推断技术栈
-2. 生成简化版 ABSTRACT.md：
-```markdown
-# 项目架构摘要
-
-> 最后更新：{日期}
-
-## 项目定位
-{根据 package.json name 字段或目录名推断}
-
-## 技术栈
-- 语言：{根据配置文件推断：Node.js/Java/Go}
-- 包管理：{npm/maven/go mod}
-
-## 模块结构
-> 待补充：项目尚未开始编码，首次任务完成后更新此章节
-
-## 核心业务流程
-> 待补充
-
-## 目录索引
-> 待补充
-```
-3. 向用户展示
-4. 询问用户："简化版架构摘要是否适用？（回复'确认'或提出修改）"
-
-**完成反馈：**
-```
-✅ 步骤 4/5 完成：ABSTRACT.md 初始化（简化版）
-   文件：.easy-coding/ABSTRACT.md
-   项目定位：{一句话描述}
-   状态：已生成并确认（待后续补充）
-```
-
----
-
-**情况 C：几乎为空（最简初始化）**
-
-1. 生成最简版 ABSTRACT.md：
-```markdown
-# 项目架构摘要
-
-> 最后更新：{日期}
-
-## 项目定位
-> 待补充：请在 SOUL.md 中填写项目描述
-
-## 技术栈
-> 待补充：请在 SOUL.md 中填写技术栈
-
-## 模块结构
-> 待补充：首次编码任务完成后更新
-
-## 核心业务流程
-> 待补充
-
-## 目录索引
-> 待补充
-```
-2. 提示用户：`项目尚未初始化，建议在 SOUL.md 中补充项目信息`
-3. 进入步骤 5
-
-**完成反馈：**
-```
-✅ 步骤 4/5 完成：ABSTRACT.md 初始化（最简版）
-   文件：.easy-coding/ABSTRACT.md
-   状态：已创建（待首次任务后补充）
-```
+- `interactive_init`：向用户展示摘要并确认
+- `post_v1_auto_init`：自动生成，在完成报告中说明数据来源和摘要结论
 
 ---
 
 ### 步骤 5：初始化 MEMORY.md
 
-**来源：** `templates/MEMORY.md`
+来源：`templates/MEMORY.md`
 
-**详细步骤：**
-1. 使用 `read_file` 读取 `templates/MEMORY.md`
-2. 拷贝到 `.easy-coding/memory/long/MEMORY.md`
-3. 预填充日期字段
-4. 验证文件创建成功
-
-**完成反馈：**
-```
-✅ 步骤 5/5 完成：MEMORY.md 初始化
-   文件：.easy-coding/memory/long/MEMORY.md
-   状态：已创建
-```
+执行要求：
+1. 拷贝模板到 `.easy-coding/memory/long/MEMORY.md`
+2. 预填充日期字段
+3. 验证文件创建成功
 
 ---
 
 ## 初始化完成
 
-**输出完成报告：**
+输出完成报告：
 
-```
+```markdown
 [阶段：INIT]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -273,17 +163,22 @@
 已创建/更新的文件：
 1. ✅ .easy-coding/ 目录结构
 2. ✅ .easy-coding/SOUL.md - 项目灵魂
-3. ✅ .easy-coding/RULES.md - {语言}编码规范
-4. ✅ .easy-coding/ABSTRACT.md - 架构摘要（{完整版/简化版/最简版}）
+3. ✅ .easy-coding/RULES.md - 语言编码规范
+4. ✅ .easy-coding/ABSTRACT.md - 架构摘要
 5. ✅ .easy-coding/memory/long/MEMORY.md - 长期记忆
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+说明：
+- 当前模式：{interactive_init/post_v1_auto_init}
+- 回补初始化不会覆盖既有 Spec、Prototype 和已确认代码成果
 
-返回 SKILL.md 继续阶段 2...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 ---
 
 ## 返回 SKILL.md
 
-初始化完成后，AI 回到 SKILL.md 的 **1.2 输出背景摘要** 继续执行。
+初始化完成后，AI 返回 `SKILL.md` 继续执行：
+
+- 常规初始化：回到 INIT 背景摘要，再进入 ANALYSIS
+- 初创项目回补初始化：直接进入 MEMORY_SHORT
