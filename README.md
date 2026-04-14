@@ -46,13 +46,16 @@ Easy-Coding 支持在原有 `.easy-coding` 资产之外，按需读取以下输�
 - 存在则读取，不存在则跳过
 - 能从代码、Spec、Prototype 推断的信息不重复追问
 - 当前提示词与 Spec 冲突时，必须提示用户拍板
+- 若项目被识别为初创项目，且已发现可用 Spec / Prototype，系统会主动进入分析，不等待用户补充需求描述
 
 ### 3. 初创项目与迭代项目
 
 #### 初创项目
 
 - 基本无成型业务代码
+- 触发后会主动做空项目 / 近似空项目检测，不依赖用户口头声明
 - 首次任务跳过前置初始化
+- 若已存在 Spec / Prototype，会直接基于文档进入 ANALYSIS
 - 严格按 Spec 推进第一版开发
 - 第一版开发完成并经用户确认后，自动执行初始化回补
 
@@ -110,7 +113,7 @@ INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → MEMORY_SHORT → MEMORY_
 ### 初创项目流程
 
 ```text
-模式判定 → 跳过前置 INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT
+模式判定 → 空项目检测 → 发现 Spec / Prototype → 跳过前置 INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT
 → 用户确认第一版结果 → 初始化回补 → MEMORY_SHORT → MEMORY_LONG → COMPLETE
 ```
 

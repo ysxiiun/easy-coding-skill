@@ -20,6 +20,7 @@
 3. 可选输入缺失时可以跳过，但关键实现信息缺失时必须追问或显式标记假设。
 4. Prototype HTML 仅供原型参考，不得直接复制到生产代码。
 5. 第一版开发完成并经用户确认后，必须自动执行一次初始化回补，再进入记忆阶段。
+6. 若已存在可用 Spec / Prototype 输入，必须主动进入分析，不等待用户重新描述需求。
 
 ---
 
@@ -41,6 +42,26 @@
 - 能从代码、配置、Spec、Prototype 推断的信息不要反问用户
 - 若关键信息会影响数据模型、接口、页面结构、核心交互或技术路线，不能脑补，必须停下来确认
 
+## 自动进入分析
+
+当满足以下条件时，必须直接进入 ANALYSIS，而不是等待用户继续输入：
+
+1. 项目已判定为 `初创项目`
+2. 已检测到空项目或近似空项目信号
+3. 至少存在以下任一输入：
+   - `.easy-coding/spec/Architect-Spec.md`
+   - `.easy-coding/spec/Product-Spec.md`
+   - `.easy-coding/spec/UI-Spec.md`
+   - `.easy-coding/prototype/Easy-UI-Prototype.md`
+
+此时的默认行为是：
+
+- 把已发现的 Spec / Prototype 视为本轮主要需求来源
+- 先完成方案分析
+- 只有在 Spec 无法支撑关键实现判断时，才向用户追问缺口
+
+若未发现任何可用 Spec / Prototype 输入，才提示用户补充需求或准备 Spec。
+
 ---
 
 ## 阶段路由
@@ -58,7 +79,8 @@
 1. 识别本次任务是否涉及前端开发
 2. 识别本次实际使用了哪些 Spec / Prototype 输入
 3. 判断用户提示词与 Spec 是否冲突
-4. 若涉及前端：
+4. 若用户没有额外描述需求，默认以 Spec / Prototype 作为需求来源
+5. 若涉及前端：
    - 优先启用 `frontend-skill`
    - 按需读取 `references/design/apple-design-reference.md`
    - 明确说明 Prototype HTML 只作参考，不直接用于生产实现
@@ -71,6 +93,10 @@
 **若 Spec 信息不足：**
 - 必须追问，或在方案中显式标注“当前假设”
 - 不得伪装为已确认结论
+
+**若用户未输入额外需求，但 Spec 已足够：**
+- 直接输出首版技术方案
+- 不要先回复“请描述您的需求”
 
 ### 3. WAITING_CONFIRM
 
