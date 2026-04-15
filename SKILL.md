@@ -1,6 +1,6 @@
 ---
 name: easy-coding
-version: 1.1.0
+version: 2.0.0
 description: EASY-CODING 编程助手技能 - 人机共创模式。触发词："帮我完成"、"帮我做"、"我有一个需求"、"帮我实现"、"帮我修改"、"帮我修复"、"帮我优化"、"ec"、"EC"、"easy-coding"。若用户消息开头包含 "#no-coding"，则当前轮跳过 skill 全部流程与约束。支持 Spec 驱动的初创项目与迭代项目协作。
 triggers:
   - 帮我完成
