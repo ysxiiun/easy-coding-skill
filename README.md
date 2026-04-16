@@ -24,6 +24,9 @@ Easy-Coding 采用“三层结构”组织规则，降低上下文污染：
 - `SKILL.md`
   - 总控层
   - 负责全局约束、阶段定义、模式判定、输入发现、冲突处理、流程路由
+- `agents/openai.yaml`
+  - 接口层
+  - 负责 Codex 侧展示名称、简述和默认调用提示词
 - `flow/`
   - 流程层
   - 负责初始化、初创项目等场景流程
@@ -159,6 +162,8 @@ INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → MEMORY_SHORT → MEMORY_
 
 ```text
 easy-coding/
+├── agents/
+│   └── openai.yaml
 ├── SKILL.md
 ├── flow/
 │   ├── init.md
@@ -185,6 +190,7 @@ easy-coding/
 - 方案未确认前，禁止执行代码变更
 - 无论变更大小，必须重新确认
 - 每次回复必须标注当前阶段
+- 编码时必须补充必要注释，默认使用当前对话语言；若用户明确指定注释语言，以用户要求为准
 - 当前提示词与 Spec 冲突时，必须先询问用户
 - Prototype HTML 永远只作为参考输入，不直接当作生产实现
 - Apple 设计规范只是默认高质量前端基线，不覆盖项目既有设计系统或用户显式要求

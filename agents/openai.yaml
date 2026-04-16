@@ -1,0 +1,4 @@
+interface:
+  display_name: "Easy Coding"
+  short_description: "七阶段人机共创编程助手，支持 Spec 驱动、项目记忆和保守迭代"
+  default_prompt: "使用 $easy-coding，先扫描当前项目与 `.easy-coding` 资产，给出实施级技术方案，并在用户确认后再执行代码修改。编码时补充必要注释；若用户未指定注释语言，默认使用当前对话语言。"
