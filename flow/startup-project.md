@@ -36,12 +36,14 @@
 5. `.easy-coding/spec/UI-Spec.md`
 6. `.easy-coding/prototype/Easy-UI-Prototype.md`
 7. Prototype 文档中引用的 HTML 文件
+8. 扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件（仅扫描文件名，不自动读取正文）
 
 读取规则：
 
 - 存在则读取，不存在则跳过
 - 能从代码、配置、Spec、Prototype 推断的信息不要反问用户
 - 若关键信息会影响数据模型、接口、页面结构、核心交互或技术路线，不能脑补，必须停下来确认
+- 若发现 Dev-Spec 候选文件，先询问用户是否加载；支持选择 1 个、多个或全选；用户未选择前，不读取正文
 
 ## 自动进入分析
 
@@ -54,10 +56,12 @@
    - `.easy-coding/spec/Product-Spec.md`
    - `.easy-coding/spec/UI-Spec.md`
    - `.easy-coding/prototype/Easy-UI-Prototype.md`
+   - `.easy-coding/spec/dev/` 下存在候选 Markdown 文档
 
 此时的默认行为是：
 
 - 把已发现的 Spec / Prototype 视为本轮主要需求来源
+- 若仅发现 Dev-Spec 候选，先提示用户选择是否加载；支持多选 / 全选；选定后直接进入分析
 - 先完成方案分析
 - 只有在 Spec 无法支撑关键实现判断时，才向用户追问缺口
 
@@ -79,9 +83,10 @@
 
 1. 识别本次任务是否涉及前端开发
 2. 识别本次实际使用了哪些 Spec / Prototype 输入
-3. 判断用户提示词与 Spec 是否冲突
-4. 若用户没有额外描述需求，默认以 Spec / Prototype 作为需求来源
-5. 若涉及前端：
+3. 若已扫描到 Dev-Spec 候选但未选择，先输出候选列表并等待用户选择是否加载
+4. 判断用户提示词与 Spec / Dev-Spec 是否冲突
+5. 若用户没有额外描述需求，默认以 Spec / Prototype / 已选 Dev-Spec 作为需求来源
+6. 若涉及前端：
    - 优先启用 `frontend-skill`
    - 按需读取 `references/design/apple-design-reference.md`
    - 明确说明 Prototype HTML 只作参考，不直接用于生产实现
@@ -100,6 +105,12 @@
 - 不要先回复“请描述您的需求”
 - 若仓库里已有脚手架、基础模块、配置或局部实现，仍必须先阅读这些代码，再给出方案
 - 输出的必须是可实施方案，不是“后续分析计划”
+
+**若用户拒绝加载 Dev-Spec：**
+- 若当前轮没有任何足以支撑分析的有效提示词，且没有固定 Spec / Prototype 可补足上下文，直接输出：
+  - `未识别到用户意图, Easy Coding 已准备好, 请随时向我发问`
+- 当前轮到此结束，不进入 `WAITING_CONFIRM`，不输出技术方案
+- 若仍有足够上下文支撑分析，则继续按现有分析流程执行
 
 **若任务涉及前端工程实现：**
 - 必须先输出“原型到工程实现映射”
@@ -164,9 +175,16 @@
 - UI-Spec：{已使用/未使用}
 - Prototype 文档：{已使用/未使用}
 - Prototype HTML：{已使用/未使用}
+- Dev-Spec 目录扫描：{有/无}
+- Dev-Spec 候选文件：{文件路径列表/无}
+- 已选 Dev-Spec：{文件路径列表/无}
+- 未加载 Dev-Spec：{文件路径列表/无}
 
 ### 冲突摘要
 - 提示词 vs Spec：{无 / 冲突说明}
+- 提示词 vs Dev-Spec：{无 / 冲突说明}
+- Dev-Spec vs 固定 Spec：{无 / 冲突说明}
+- Dev-Spec vs 现有代码：{无 / 冲突说明}
 
 ### 当前假设
 - {若有则列出；无则填“无”}

@@ -1,6 +1,6 @@
 ---
 name: easy-coding
-version: 2.0.1
+version: 3.0.0
 description: EASY-CODING 编程助手技能 - 人机共创模式。触发词："帮我完成"、"帮我做"、"我有一个需求"、"帮我实现"、"帮我修改"、"帮我修复"、"帮我优化"、"ec"、"EC"、"easy-coding"。若用户消息开头包含 "#no-coding"，则当前轮跳过 skill 全部流程与约束。支持 Spec 驱动的初创项目与迭代项目协作。
 triggers:
   - 帮我完成
@@ -213,6 +213,7 @@ triggers:
 10. `.easy-coding/spec/UI-Spec.md`
 11. `.easy-coding/prototype/Easy-UI-Prototype.md`
 12. `Easy-UI-Prototype.md` 中引用的每一个 HTML 原型文件
+13. 扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件（仅扫描文件名，不自动读取正文）
 
 ## 读取规则
 
@@ -221,6 +222,30 @@ triggers:
 - 解析 `Easy-UI-Prototype.md` 后，应尽可能读取其中引用的 HTML 文件；若部分文件缺失，只做提示，不作为硬阻断
 - 若项目已判定为 `初创项目` 且发现了可用 Spec / Prototype 输入，应直接基于这些输入进入分析
 - 只有在关键实现信息仍明显不足时，才向用户追问
+
+## Dev-Spec 候选处理
+
+- `.easy-coding/spec/dev/` 仅作为运行时候选目录，不属于固定全局 Spec 输入。
+- 扫描时只列出候选 Markdown 文件，不自动读取正文。
+- 若发现候选文件，且当前需求尚未选定 Dev-Spec：
+  - 在 `ANALYSIS` 阶段先输出短提示，明确列出扫描到的候选文件。
+  - 询问用户是否加载；支持选择 1 个、多个，或“全选”当前候选文件。
+  - 在用户明确选择前，不读取任何 Dev-Spec 正文，不进入正式技术方案分析。
+- 若用户明确选择一个或多个 Dev-Spec：
+  - 立即读取所选文件集合。
+  - 将其标记为“当前需求已选 Dev-Spec 集合”。
+  - 直接进入正式分析，不再要求用户补充需求描述。
+- 若用户明确表示“不加载”：
+  - 若当前轮也没有任何足以支撑分析的有效提示词，且不存在可补足上下文的固定 Spec / Prototype 输入，直接输出：
+    - `未识别到用户意图, Easy Coding 已准备好, 请随时向我发问`
+    - 当前轮到此结束，不进入 `WAITING_CONFIRM`，不产出技术方案。
+  - 否则继续按现有流程分析。
+  - 但必须在分析结果中标注具体“未加载 Dev-Spec”文件列表。
+- 已选 Dev-Spec 的生命周期仅限当前需求：
+  - 从本次 `ANALYSIS` 开始，持续到该需求结束或用户明确切换/清空为止。
+  - 不写入 `.easy-coding/spec/` 固定输入集合。
+  - 不写入 `.easy-coding/memory/`，不作为后续需求默认输入。
+  - 若用户在需求中途切换 Dev-Spec，视为需求变更，必须回到 `ANALYSIS` 并用新的已选集合重新输出方案。
 
 ## 前端任务附加读取
 
@@ -261,7 +286,8 @@ triggers:
 
 1. 用户当前提示词
 2. 现有代码与项目现状
-3. 历史 Spec / Prototype / Memory / ABSTRACT
+3. 当前需求已选 Dev-Spec
+4. 历史 Spec / Prototype / Memory / ABSTRACT
 
 ## 必须显式提示的冲突
 
@@ -269,6 +295,11 @@ triggers:
 - 必须输出冲突摘要
 - 必须询问用户采用“按当前提示词”还是“按 Spec”
 - 在用户拍板前，不得进入 IMPLEMENT
+
+### Dev-Spec vs 固定 Spec / 现有代码
+- 若当前需求已选 Dev-Spec 集合，必须检查其与固定 Spec、现有代码是否冲突
+- 若冲突会影响技术路线、模型、接口、状态流转或页面交互，必须在 `ANALYSIS` 中显式说明
+- 不得静默以 Dev-Spec 覆盖固定 Spec 或现有代码
 
 ### Spec vs 现有代码（仅迭代项目）
 - 默认采用保守迭代策略
@@ -367,6 +398,7 @@ triggers:
 - 若 Product-Spec / UI-Spec / Architect-Spec / Prototype 已经覆盖了大部分关键信息，应直接把这些文档内容视为已知项
 - 不要因为“用户本轮没有额外输入”就退回到泛化追问
 - 只有 Spec 中缺少关键实现信息时，才追问用户
+- 若已扫描到 Dev-Spec 候选但用户尚未选择，先完成候选提示与选择，再进入正式方案分析
 
 ## 2.2 背景数据加载
 
@@ -378,6 +410,7 @@ triggers:
 - `.easy-coding/memory/long/MEMORY.md`
 - `.easy-coding/memory/short/*.md`
 - 发现到的 Spec / Prototype / Prototype HTML
+- 当前需求已选 Dev-Spec（若有）
 
 若当前为 `初创项目` 且用户没有补充额外需求，必须默认把 Spec / Prototype 视为本轮主要需求来源。
 
@@ -450,9 +483,16 @@ triggers:
 - UI-Spec：{已使用/未使用}
 - Prototype 文档：{已使用/未使用}
 - Prototype HTML：{已使用/未使用}
+- Dev-Spec 目录扫描：{有/无}
+- Dev-Spec 候选文件：{文件路径列表/无}
+- 已选 Dev-Spec：{文件路径列表/无}
+- 未加载 Dev-Spec：{文件路径列表/无}
 
 ### 冲突摘要
 - 提示词 vs Spec：{无 / 冲突说明}
+- 提示词 vs Dev-Spec：{无 / 冲突说明}
+- Dev-Spec vs 固定 Spec：{无 / 冲突说明}
+- Dev-Spec vs 现有代码：{无 / 冲突说明}
 - Spec vs 现有代码：{无 / 冲突说明}
 
 ### 影响面分析
