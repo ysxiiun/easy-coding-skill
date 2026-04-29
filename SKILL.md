@@ -1,25 +1,21 @@
 ---
 name: easy-coding
 version: 3.0.0
-description: EASY-CODING 编程助手技能 - 人机共创模式。触发词："帮我完成"、"帮我做"、"我有一个需求"、"帮我实现"、"帮我修改"、"帮我修复"、"帮我优化"、"ec"、"EC"、"easy-coding"。若用户消息开头包含 "#no-coding"，则当前轮跳过 skill 全部流程与约束。支持 Spec 驱动的初创项目与迭代项目协作。
-triggers:
-  - 帮我完成
-  - 帮我做
-  - 我有一个需求
-  - 帮我实现
-  - 帮我修改
-  - 帮我修复
-  - 帮我优化
-  - ec
-  - EC
-  - easy-coding
+description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或明确要求加载 Easy Coding skill 时使用；不要基于“帮我实现/修改/修复/优化”等普通提示词自动加载。EASY-CODING 是 Spec 驱动的人机共创编程助手，支持初创项目与迭代项目协作。若用户消息开头包含 "#no-coding"，则当前轮跳过 skill 全部流程与约束。
 ---
 
 # 🔴 核心约束（每轮对话必须遵守）
 
+## 显式加载规则
+
+- 本 skill 只能由用户显式点名加载：`$easy-coding`、`easy-coding`，或清楚表达“加载/使用 Easy Coding skill”
+- 不得因为用户说“帮我实现”“帮我修改”“帮我修复”“我有一个需求”“ec”等普通任务提示而自动进入本 skill
+- 如果用户没有显式点名，本 skill 的阶段、阻断、记忆和初始化流程都不应生效
+- `#no-coding` 仅用于用户已经显式加载本 skill 后，临时跳过当前轮 skill 流程
+
 ## `#no-coding` 单轮旁路规则
 
-**优先级最高，先于所有触发词、阶段判断、工具阻断检查执行。**
+**优先级最高，先于所有显式加载后的阶段判断、工具阻断检查执行。**
 
 - 若用户消息在开头写入 `#no-coding`，则当前轮立即退出 easy-coding 模式
 - 当前轮完全跳过 easy-coding 的全部约束与流程，包括但不限于：

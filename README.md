@@ -156,20 +156,17 @@ INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → MEMORY_SHORT → MEMORY_
 
 ## 触发方式
 
-**触发词：**
+**仅支持显式加载：**
 
-- "帮我完成..."
-- "帮我做..."
-- "我有一个需求..."
-- "帮我实现..."
-- "帮我修改..."
-- "帮我修复..."
-- "帮我优化..."
-- `ec` / `EC` / `easy-coding`
+- `使用 $easy-coding ...`
+- `加载 easy-coding ...`
+- `使用 Easy Coding skill ...`
+
+普通任务描述不会自动加载本 skill，例如“帮我实现”“帮我修改”“我有一个需求”等都只按普通 agent 流程处理，除非用户同时显式点名 Easy Coding。
 
 ### 跳过 skill 流程
 
-若当前轮不希望进入 Easy-Coding 的阶段流程，可在消息开头写入 `#no-coding`。
+若已经显式加载 Easy Coding，但当前轮不希望进入 Easy-Coding 的阶段流程，可在消息开头写入 `#no-coding`。
 
 例如：
 
