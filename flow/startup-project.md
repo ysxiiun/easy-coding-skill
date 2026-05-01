@@ -18,7 +18,7 @@
 1. `初创项目` 首次任务跳过前置 INIT 阻断。
 2. 第一版开发必须严格以 Spec 为主依据。
 3. 可选输入缺失时可以跳过，但关键实现信息缺失时必须追问或显式标记假设。
-4. Prototype HTML 仅供原型参考，不得直接复制到生产代码。
+4. Prototype HTML 与图片仅供原型参考，不得直接复制到生产代码或当作生产设计稿。
 5. 第一版开发完成并经用户确认后，必须自动执行一次初始化回补，再进入记忆阶段。
 6. 若已存在可用 Spec / Prototype 输入，必须主动进入分析，不等待用户重新描述需求。
 7. 若交付的是前端工程代码，必须完成真实工程适配与接口对接，不能用原型页或 mock 页面冒充交付结果。
@@ -35,7 +35,7 @@
 4. `.easy-coding/spec/Product-Spec.md`
 5. `.easy-coding/spec/UI-Spec.md`
 6. `.easy-coding/prototype/Easy-UI-Prototype.md`
-7. Prototype 文档中引用的 HTML 文件
+7. `.easy-coding/prototype/` 下的 HTML 文件、assets 和 images
 8. 扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件（仅扫描文件名，不自动读取正文）
 
 读取规则：
@@ -89,7 +89,7 @@
 6. 若涉及前端：
    - 优先启用 `frontend-skill`
    - 按需读取 `references/design/apple-design-reference.md`
-   - 明确说明 Prototype HTML 只作参考，不直接用于生产实现
+   - 明确说明 Prototype HTML 与图片只作参考，不直接用于生产实现
 
 **若提示词与 Spec 冲突：**
 - 必须先输出冲突摘要
@@ -132,10 +132,10 @@
 2. 若是前端实现：
    - 优先遵循 `frontend-skill`
    - 参考 Apple 设计规范
-   - 参考 Prototype 文档与 HTML
+   - 参考 Prototype 文档、HTML、assets 与 images
    - 但必须结合当前框架、工程结构、组件体系、状态管理、路由和样式方案做深度适配
    - 必须对接真实接口或已确认的接口契约
-   - 不得直接复制 Prototype HTML 或保留整页 mock 数据作为最终实现
+   - 不得直接复制 Prototype HTML、转贴 Prototype 图片或保留整页 mock 数据作为最终实现
 3. 若用户在实施中变更需求，必须回到 WAITING_CONFIRM
 
 ### 5. INIT 回补
@@ -175,6 +175,8 @@
 - UI-Spec：{已使用/未使用}
 - Prototype 文档：{已使用/未使用}
 - Prototype HTML：{已使用/未使用}
+- Prototype 图片：{已使用/未使用/环境不支持直接读取像素}
+- Prototype assets：{已使用/未使用}
 - Dev-Spec 目录扫描：{有/无}
 - Dev-Spec 候选文件：{文件路径列表/无}
 - 已选 Dev-Spec：{文件路径列表/无}
@@ -205,8 +207,8 @@
 ### 前端实现说明
 - frontend-skill：{已启用/应启用}
 - Apple 设计参考：{已使用/未使用}
-- Prototype 参考：{已使用/未使用}
-- 说明：Prototype HTML 仅供原型参考，不得直接用于生产实现。
+- Prototype 参考：{文档/HTML/图片/assets 的使用情况}
+- 说明：Prototype HTML 与图片仅供原型参考，不得直接用于生产实现。
 ```
 
 ---

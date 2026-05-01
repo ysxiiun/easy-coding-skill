@@ -208,14 +208,19 @@ description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或明确�
 9. `.easy-coding/spec/Product-Spec.md`
 10. `.easy-coding/spec/UI-Spec.md`
 11. `.easy-coding/prototype/Easy-UI-Prototype.md`
-12. `Easy-UI-Prototype.md` 中引用的每一个 HTML 原型文件
-13. 扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件（仅扫描文件名，不自动读取正文）
+12. `.easy-coding/prototype/index.html` 与 `.easy-coding/prototype/` 下的页面 HTML 文件
+13. `.easy-coding/prototype/assets/` 下与原型行为、样式或 mock 数据相关的资源文件
+14. `.easy-coding/prototype/images/` 下的 AI 原生生图原型图片
+15. 扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件（仅扫描文件名，不自动读取正文）
 
 ## 读取规则
 
 - 存在则读取，不存在则跳过
+- Prototype 固定根目录为 `.easy-coding/prototype/`；不要到其他目录猜测原型产物
 - 原型 HTML 读取后只作为参考输入，绝不视为可直接落地的生产代码
-- 解析 `Easy-UI-Prototype.md` 后，应尽可能读取其中引用的 HTML 文件；若部分文件缺失，只做提示，不作为硬阻断
+- 解析 `.easy-coding/prototype/Easy-UI-Prototype.md` 后，应尽可能读取其中引用的 HTML 文件；若文档未列全，则继续扫描 `.easy-coding/prototype/` 下的 HTML 文件
+- `assets/` 中的 CSS、JS 和 mock 数据只用于理解视觉、交互与数据示例，不作为生产实现直接复用
+- `images/` 中的 AI 原型图片只作为视觉和布局参考；若当前运行环境无法直接读取图片像素，应读取 `Easy-UI-Prototype.md` 中的页面索引、用途和提示词，并在分析中标注未直接检查图片像素
 - 若项目已判定为 `初创项目` 且发现了可用 Spec / Prototype 输入，应直接基于这些输入进入分析
 - 只有在关键实现信息仍明显不足时，才向用户追问
 
@@ -249,9 +254,10 @@ description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或明确�
 
 1. 按需读取 `references/design/apple-design-reference.md`
 2. 优先启用 `frontend-skill`
-3. 优先参考 `.easy-coding/prototype/Easy-UI-Prototype.md` 及其引用 HTML
+3. 优先参考 `.easy-coding/prototype/` 下的 Prototype 文档、HTML、assets 与 images
 4. 明确遵守以下约束：
    - Prototype HTML 仅供原型参考
+   - Prototype 图片仅供视觉、布局和交互意图参考
    - 不得直接复制到生产代码
    - 必须结合当前项目框架、组件体系、状态管理、路由和样式方案做深度再设计与适配
 
@@ -405,7 +411,7 @@ description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或明确�
 - `.easy-coding/ABSTRACT.md`
 - `.easy-coding/memory/long/MEMORY.md`
 - `.easy-coding/memory/short/*.md`
-- 发现到的 Spec / Prototype / Prototype HTML
+- 发现到的 Spec / Prototype 文档 / Prototype HTML / Prototype 图片 / Prototype assets
 - 当前需求已选 Dev-Spec（若有）
 
 若当前为 `初创项目` 且用户没有补充额外需求，必须默认把 Spec / Prototype 视为本轮主要需求来源。
@@ -432,8 +438,8 @@ description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或明确�
 
 - 必须说明已启用或应启用 `frontend-skill`
 - 必须说明是否参考了 `references/design/apple-design-reference.md`
-- 必须说明是否参考了 Prototype 文档与 HTML
-- 必须明确写出“Prototype HTML 仅供参考，不能直接用于生产实现”
+- 必须说明是否参考了 Prototype 文档、HTML、图片与 assets
+- 必须明确写出“Prototype HTML 与图片仅供参考，不能直接用于生产实现”
 - 必须输出“原型到工程实现映射”，至少覆盖：
   - 页面 / 模块拆解
   - 组件拆解
@@ -479,6 +485,8 @@ description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或明确�
 - UI-Spec：{已使用/未使用}
 - Prototype 文档：{已使用/未使用}
 - Prototype HTML：{已使用/未使用}
+- Prototype 图片：{已使用/未使用/环境不支持直接读取像素}
+- Prototype assets：{已使用/未使用}
 - Dev-Spec 目录扫描：{有/无}
 - Dev-Spec 候选文件：{文件路径列表/无}
 - 已选 Dev-Spec：{文件路径列表/无}
@@ -594,10 +602,10 @@ description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或明确�
 - 编码时必须补充必要注释，重点说明非直观逻辑、关键边界、业务约束和易错点，禁止堆砌无信息量注释
 - 若用户未明确指定注释语言，默认使用当前对话语言；若用户明确指定，则按用户要求执行
 - 前端任务必须优先调用或参考 `frontend-skill`
-- Prototype HTML 仅可作为参考输入，不得直接复制到生产代码
+- Prototype HTML 与图片仅可作为参考输入，不得直接复制或转贴为生产代码 / 生产设计稿
 - 初创项目第一版开发必须严格以 Spec 为主依据
 - 迭代项目默认按保守迭代执行，不擅自用 Spec 覆盖现有系统
-- 若交付目标是真实前端代码，不得仅交付 mock 页面、静态演示页或把原型 HTML 改后缀后直接提交
+- 若交付目标是真实前端代码，不得仅交付 mock 页面、静态演示页、原型截图，或把原型 HTML 改后缀后直接提交
 - 前端实施必须优先完成真实工程接入：
   - 接入现有页面路由
   - 接入真实组件体系与状态管理

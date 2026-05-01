@@ -34,7 +34,7 @@
 1. 只补齐 `.easy-coding/` 基础资产，不改写业务代码。
 2. 回补初始化时，不覆盖以下内容：
    - `.easy-coding/spec/` 下已有 Spec
-   - `.easy-coding/prototype/` 下已有 Prototype 与 HTML
+   - `.easy-coding/prototype/` 下已有 Prototype 文档、HTML、assets 与 images
    - 用户已确认的代码成果
 3. 若以 `post_v1_auto_init` 运行，`ABSTRACT.md` 必须结合“现有代码 + Spec + Prototype”生成，而不是按空项目逻辑草率创建。
 4. `.easy-coding/spec/dev/` 下的 Dev-Spec 候选仅属于运行时按需输入，不纳入初始化回补的固定 Spec 集合，也不写入长期资产。
@@ -112,7 +112,7 @@
 - `.easy-coding/spec/Product-Spec.md`
 - `.easy-coding/spec/UI-Spec.md`
 - `.easy-coding/prototype/Easy-UI-Prototype.md`
-- Prototype 文档中引用的 HTML 原型文件
+- `.easy-coding/prototype/` 下的 HTML 原型文件、assets 与 images
 
 不默认吸收：
 

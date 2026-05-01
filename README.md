@@ -52,7 +52,7 @@ Easy-Coding 支持在原有 `.easy-coding` 资产之外，按需读取以下输�
 - `.easy-coding/spec/Product-Spec.md`
 - `.easy-coding/spec/UI-Spec.md`
 - `.easy-coding/prototype/Easy-UI-Prototype.md`
-- `Easy-UI-Prototype.md` 中引用的每一个 HTML 原型文件
+- `.easy-coding/prototype/` 下的 HTML 原型文件、assets 和 AI 原生生图图片
 - `.easy-coding/spec/dev/` 下的候选 Dev-Spec 文档（仅扫描候选，不自动读取正文）
 
 读取规则：
@@ -115,12 +115,12 @@ Easy-Coding 支持在原有 `.easy-coding` 资产之外，按需读取以下输�
 - 必须优先启用 `frontend-skill`
 - 若执行环境支持 agent / 子代理协作，应尽可能调度带前端 skill 的实现角色
 - 按需读取 `references/design/apple-design-reference.md`
-- 优先参考 `.easy-coding/prototype/Easy-UI-Prototype.md` 与其引用 HTML
+- 优先参考 `.easy-coding/prototype/` 下的 Prototype 文档、HTML、assets 与 images
 
 **重要边界：**
 
-- Prototype HTML 仅供原型参考
-- 不得直接复制到生产代码
+- Prototype HTML 与图片仅供原型参考
+- 不得直接复制到生产代码，也不得把图片当作生产设计稿
 - 必须结合当前项目框架、组件体系、状态管理、路由和样式方案做深度再设计与适配
 - 若交付目标是真实前端代码，必须完成真实接口对接或明确的接口契约接入，不能用 mock 页面冒充最终结果
 
@@ -197,6 +197,10 @@ easy-coding/
     ├── ABSTRACT.md
     ├── spec/
     ├── prototype/
+    │   ├── Easy-UI-Prototype.md
+    │   ├── index.html
+    │   ├── assets/
+    │   └── images/
     └── memory/
 ```
 
@@ -209,7 +213,7 @@ easy-coding/
 - 每次回复必须标注当前阶段
 - 编码时必须补充必要注释，默认使用当前对话语言；若用户明确指定注释语言，以用户要求为准
 - 当前提示词与 Spec 冲突时，必须先询问用户
-- Prototype HTML 永远只作为参考输入，不直接当作生产实现
+- Prototype HTML 与图片永远只作为参考输入，不直接当作生产实现或生产设计稿
 - Apple 设计规范只是默认高质量前端基线，不覆盖项目既有设计系统或用户显式要求
 
 ---
@@ -234,8 +238,8 @@ easy-coding/
 
 1. 初创项目尽量先准备 Product / UI / Architect Spec，再让 Easy-Coding 按 Spec 推进第一版开发。
 2. 迭代项目中，如果历史 Spec 与现状代码已经偏离，优先让 Easy-Coding 先说明冲突，而不是直接强推 Spec。
-3. 前端任务尽量同时提供 UI-Spec、Prototype 文档和原型 HTML，能显著提升分析质量。
-4. 不要把 Prototype HTML 当成最终页面代码；真正实现时应结合工程环境重新设计与适配。
+3. 前端任务尽量同时提供 UI-Spec、Prototype 文档、原型 HTML 或 AI 原型图片，能显著提升分析质量。
+4. 不要把 Prototype HTML 或图片当成最终页面代码 / 生产设计稿；真正实现时应结合工程环境重新设计与适配。
 5. 若任务目标是生产级前端交付，必须要求 AI 明确页面映射、组件拆解、数据来源和接口对接方案；只有 mock 页面不算完成。
 6. 若仓库中已经有代码，ANALYSIS 必须先基于实际代码给出现状和修改方案；只复述需求不算合格分析。
 
