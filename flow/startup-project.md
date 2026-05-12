@@ -163,31 +163,18 @@
 
 ## 输出要求
 
-初创项目的 ANALYSIS 输出，至少额外包含以下字段：
+初创项目的 ANALYSIS 必须遵循 `SKILL.md` 2.5 的“核心必填 + 条件展开”主模板，不重复输出主模板已经要求的 `项目模式`、`Spec 输入应用` 和 `冲突摘要`。
+
+主模板中的 `冲突摘要` 对初创项目同样完整适用，必须覆盖：
+- 提示词 vs Spec
+- 提示词 vs Dev-Spec
+- Dev-Spec vs 固定 Spec
+- Dev-Spec vs 现有代码
+- Spec vs 现有代码
+
+初创项目必须额外补充：
 
 ```markdown
-### 项目模式
-初创项目
-
-### Spec 输入应用
-- Architect-Spec：{已使用/未使用}
-- Product-Spec：{已使用/未使用}
-- UI-Spec：{已使用/未使用}
-- Prototype 文档：{已使用/未使用}
-- Prototype HTML：{已使用/未使用}
-- Prototype 图片：{已使用/未使用/环境不支持直接读取像素}
-- Prototype assets：{已使用/未使用}
-- Dev-Spec 目录扫描：{有/无}
-- Dev-Spec 候选文件：{文件路径列表/无}
-- 已选 Dev-Spec：{文件路径列表/无}
-- 未加载 Dev-Spec：{文件路径列表/无}
-
-### 冲突摘要
-- 提示词 vs Spec：{无 / 冲突说明}
-- 提示词 vs Dev-Spec：{无 / 冲突说明}
-- Dev-Spec vs 固定 Spec：{无 / 冲突说明}
-- Dev-Spec vs 现有代码：{无 / 冲突说明}
-
 ### 当前假设
 - {若有则列出；无则填“无”}
 ```
