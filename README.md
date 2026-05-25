@@ -2,7 +2,55 @@
 
 > AI 编程协作技能，让 AI 成为懂业务、记历史、守规范、能理解 Spec 的编程伙伴。
 
-当前版本：`3.1.2`
+当前版本：`4.1.2`
+
+## 版本号规则
+
+- 第一位：重大功能更新大版本。
+- 第二位：新功能或新优化迭代。
+- 第三位：Bug 修复。
+
+## 4.1.2 更新
+
+- 修复 Easy Coding With Claude 联合模式 REVIEW 软约束问题：IMPLEMENT 后不得只输出 host 自检式简短 review 来冒充 Claude review。
+- REVIEW 必须实际调用或尝试调用 With Claude `post_implementation_review`，并记录 wrapper path、final contract、worker status 和 verdict 来源。
+- 未执行 Claude、启动失败或未收到 final contract 时，只能降级为 `Claude review unavailable`，不得输出 Claude `accept`。
+
+## 4.1.1 更新
+
+- 优化原生选择框选项设计：选项必须映射真实下游分支，不再为凑数手写低价值反馈按钮。
+- 确认类场景只保留“确认项 + 保持等待/安全否决项”，修改意见、反馈意见和补充说明统一交给客户端 free-form Other。
+- Dev-Spec 超过 3 个候选时改为“加载推荐 / 全部加载 / 不加载”，部分加载通过输入框按编号回复。
+
+## 4.1.0 更新
+
+- 收敛阶段状态机：用户可见阶段只能使用 `INIT / ANALYSIS / WAITING_CONFIRM / IMPLEMENT / REVIEW / MEMORY_SHORT / MEMORY_LONG / COMPLETE`。
+- 明确禁止 `[阶段：PLAN]`、`[阶段：VERIFY]`、`[阶段：TEST]`、`[阶段：DONE]`、`[阶段：REVIEW_BLOCKED]`；验证、测试、自检都属于 `IMPLEMENT` 内部工作。
+- 修正记忆生成门禁：Claude review accept、测试通过、host 自检通过都不等于用户确认结果；实施结果报告输出后必须等待用户确认，确认后才进入 `MEMORY_SHORT`。
+- 强化原生选择框能力探测：当前 agent 暴露 `request_user_input` 或等价工具时必须调用；不支持时才文本兜底。
+- 压缩 `agents/openai.yaml` 的默认提示，避免 metadata 承载过多流程细节造成阶段污染。
+
+## 4.0.2 更新
+
+- 修复 Easy Coding With Claude 联合模式在“确认结果”后未进入记忆阶段的问题：已激活流程的确认续流不要求用户再次显式触发 `$easy-coding`。
+- 明确 REVIEW 结束后的实施结果确认必须按项目模式进入后续流转，不能停留在 REVIEW 或普通对话确认。
+- 明确 `post_v1_auto_init` 是初创项目第一版完成后的“初始化资产回补”，仅用于首次任务跳过前置 INIT 的场景。
+
+## 4.0.1 更新
+
+- 修复 Easy Coding With Claude 联合模式阶段串线：ANALYSIS 固定使用 Easy Coding 完整方案模板，不再因 With Claude `plan_mode` 退化为简单计划。
+- 明确 Easy Coding 不存在 `[阶段：PLAN]`；With Claude 的 `workflow_type` / `phase` 只属于 worker task packet，不代表 Easy Coding 用户可见阶段。
+- 明确 Claude 分析未返回时仍处于 `[阶段：ANALYSIS]`，只能汇报协作进展，不能提前进入 `WAITING_CONFIRM` 或误用 `[阶段：REVIEW]`。
+- 收紧 `REVIEW` 进入条件：只能在 IMPLEMENT 完成，并具备变更清单、验证结果和 host 自检结论后进入。
+
+## 4.0.0 更新
+
+- 新增 Easy Coding With Claude 联合模式：仅当用户同时显式引用 Easy Coding 与 With Claude 时启用。
+- 联合模式下，`INIT` / `ANALYSIS` / `REVIEW` 可调用 Claude 只读协作，`IMPLEMENT` 仍由本地 host agent 独立完成。
+- 实施完成后自动进入 Claude 只读 Review；`fix` 最多循环 3 轮，未收敛时在实施结果报告中说明剩余问题并等待用户指令，不新增阻断阶段。
+- 新增 `flow/with-claude.md`，以渐进式加载承载组合编排，避免污染普通 Easy-Coding 流程。
+
+> 4.0.0 是 Easy Coding 与 With Claude 协同能力的首个大版本：普通 Easy-Coding 七阶段流程保持兼容，联合模式仅在双显式触发时启用。
 
 ## 3.1.2 更新
 
@@ -14,7 +62,7 @@
 
 - 明确区分“只读上下文采集”和“写入 / 修改类操作”。
 - `INIT` / `ANALYSIS` 阶段必须主动扫描项目、读取配置与固定上下文，不需要用户先确认。
-- 方案确认前禁止的是写入、修改、常规初始化写入、记忆写入、提交和推送，不是 `rg` / `ls` / 读取文件这类只读扫描；初创项目 `post_v1_auto_init` 回补在用户确认第一版实现结果后自动执行。
+- 方案确认前禁止的是写入、修改、常规初始化写入、记忆写入、提交和推送，不是 `rg` / `ls` / 读取文件这类只读扫描；初创项目 `post_v1_auto_init` 初始化资产回补在用户确认第一版实现结果后自动执行。
 
 ## 3.1.0 更新
 
@@ -25,7 +73,7 @@
 ## 3.0.0 更新
 
 - 新增 `.easy-coding/spec/dev/` 运行时候选目录扫描，不再把 Dev-Spec 作为固定全局输入。
-- 扫描到 Dev-Spec 后会先显式提示用户，并优先使用原生选择框选择加载方式；超过 3 个候选时先选择“加载推荐/全选 / 选择部分 / 不加载”，再进入分析。
+- 扫描到 Dev-Spec 后会先显式提示用户，并优先使用原生选择框选择加载方式；超过 3 个候选时先选择“加载推荐 / 全部加载 / 不加载”，部分加载通过输入框按编号回复，再进入分析。
 - 已选 Dev-Spec 仅对当前需求生效，不写入长期资产，也不会在后续需求中自动加载。
 - 用户拒绝加载 Dev-Spec 且当前轮没有有效提示词或固定 Spec / Prototype 时，直接友好退出，不强行进入分析。
 - `ANALYSIS` 输出会保留 Dev-Spec 候选文件、已选文件和未加载文件列表，便于复盘与控制。
@@ -98,7 +146,7 @@ Easy-Coding 支持在原有 `.easy-coding` 资产之外，按需读取以下输�
 - 若已存在 Spec / Prototype，会直接基于文档进入 ANALYSIS
 - 若仅存在 `spec/dev/` 候选文档，会先优先用原生选择框询问是否加载 Dev-Spec；多选或超过 3 个候选时按策略兜底；选定后直接进入 ANALYSIS
 - 严格按 Spec 推进第一版开发
-- 第一版开发完成并经用户确认后，自动执行初始化回补，再进入记忆阶段
+- 第一版开发完成并经用户确认后，若首次任务跳过了前置 INIT，自动执行初始化资产回补，再进入记忆阶段
 
 #### 迭代项目
 
@@ -144,6 +192,31 @@ Easy-Coding 支持在原有 `.easy-coding` 资产之外，按需读取以下输�
 - 必须结合当前项目框架、组件体系、状态管理、路由和样式方案做深度再设计与适配
 - 若交付目标是真实前端代码，必须完成真实接口对接或明确的接口契约接入，不能用 mock 页面冒充最终结果
 
+### 6. With Claude 联合模式
+
+当用户同时显式引用 Easy Coding 与 With Claude 时，Easy-Coding 会进入联合模式，并明确展示：
+
+```text
+已启动: Easy Coding With Claude 模式
+```
+
+联合模式的边界：
+
+- `INIT`：Claude 只读参与项目摘要、规则和背景梳理，host agent 合并并负责写入。
+- `ANALYSIS`：Claude 参与方案分析，但 Easy Coding 阶段仍固定为 `ANALYSIS`，最终必须输出完整技术方案模板，并写明 Claude 观点、采纳情况和冲突点。
+- `IMPLEMENT`：Claude 不参与，仍由本地 host agent 按确认方案完成写入。
+- `REVIEW`：实施完成且已有变更清单、验证结果和 host 自检结论后调用 Claude 只读 review，host agent 判断是否采纳并修复。
+- `REVIEW` 最多 3 轮；未收敛时结束 review，在实施结果报告中说明剩余问题和风险，等待用户进一步指令。
+- Claude 不可用时允许降级为 host-only，并在报告中标注 `Claude pass unavailable`。
+
+阶段边界：
+
+- Easy Coding 合法阶段只有 `INIT / ANALYSIS / WAITING_CONFIRM / IMPLEMENT / REVIEW / MEMORY_SHORT / MEMORY_LONG / COMPLETE`。
+- `PLAN` 不是 Easy Coding 阶段；任何用户可见输出都不得写 `[阶段：PLAN]`。
+- `VERIFY` / `TEST` / `DONE` / `REVIEW_BLOCKED` 也不是 Easy Coding 阶段；验证、自检和测试仍属于 `IMPLEMENT`，完成只能使用 `COMPLETE`。
+- With Claude 的 `workflow_type` / `phase` 只是 worker task packet 字段，不等于 Easy Coding 阶段。
+- Claude 分析还在运行时，进度更新仍使用 `[阶段：ANALYSIS]`，只能汇报协作进展和已读证据；收到 `done / blocked / needs_user_input` 后才合并输出完整方案。
+
 ---
 
 ## 工作流程
@@ -154,12 +227,20 @@ Easy-Coding 支持在原有 `.easy-coding` 资产之外，按需读取以下输�
 INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → MEMORY_SHORT → MEMORY_LONG → COMPLETE
 ```
 
+联合模式会在 `IMPLEMENT` 后增加一个只读 Review 插槽：
+
+```text
+INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → REVIEW → 实施结果报告 → 用户确认结果 → 按项目模式进入初始化资产回补或 MEMORY_SHORT → MEMORY_LONG → COMPLETE
+```
+
 ### 初创项目流程
 
 ```text
 模式判定 → 空项目检测 → 发现 Spec / Prototype → 跳过前置 INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT
-→ 用户确认第一版结果 → 初始化回补 → MEMORY_SHORT → MEMORY_LONG → COMPLETE
+→ 用户确认第一版结果 → 初始化资产回补 → MEMORY_SHORT → MEMORY_LONG → COMPLETE
 ```
+
+实施结果报告后的“确认结果”属于已激活流程续流，不要求用户再次显式引用 `$easy-coding`；但必须先等待用户确认结果，不能在输出实施结果报告的同一轮生成记忆。
 
 详细规则见：
 
@@ -181,6 +262,11 @@ INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → MEMORY_SHORT → MEMORY_
 - `使用 $easy-coding ...`
 - `加载 easy-coding ...`
 - `使用 Easy Coding skill ...`
+
+若需要联合 With Claude，必须同时显式引用两个 skill：
+
+- `使用 $easy-coding 和 $with-claude ...`
+- `加载 Easy Coding skill，并搭配 With Claude skill ...`
 
 普通任务描述不会自动加载本 skill，例如“帮我实现”“帮我修改”“我有一个需求”等都只按普通 agent 流程处理，除非用户同时显式点名 Easy Coding。
 
@@ -204,10 +290,13 @@ easy-coding/
 ├── SKILL.md
 ├── flow/
 │   ├── init.md
-│   └── startup-project.md
+│   ├── startup-project.md
+│   └── with-claude.md
 ├── references/
 │   ├── design/
 │   │   └── apple-design-reference.md
+│   ├── scenarios/
+│   │   └── easy-coding-with-claude.md
 │   └── coding/
 │       └── README.md
 ├── templates/
@@ -215,7 +304,8 @@ easy-coding/
 │   ├── RULES.md
 │   ├── ABSTRACT.md
 │   ├── MEMORY.md
-│   └── SHORT_MEMORY.md
+│   ├── SHORT_MEMORY.md
+│   └── CLAUDE_TASK_PACKET.md
 └── .easy-coding/
     ├── SOUL.md
     ├── RULES.md
@@ -233,10 +323,14 @@ easy-coding/
 
 ## 关键约束
 
-- 方案未确认前，禁止执行代码变更、常规初始化写入、记忆写入、提交或推送；初创项目初始化回补按 `post_v1_auto_init` 流程，在用户确认第一版实现结果后自动执行
+- 方案未确认前，禁止执行代码变更、常规初始化写入、记忆写入、提交或推送；初创项目初始化资产回补按 `post_v1_auto_init` 流程，在用户确认第一版实现结果后自动执行
 - 只读上下文采集不属于禁止范围；`INIT` / `ANALYSIS` 阶段必须主动扫描项目、读取配置、读取固定上下文并基于真实现状输出方案
 - 无论变更大小，必须重新确认
 - 每次回复必须标注当前阶段
+- 不允许输出 `[阶段：PLAN]`、`[阶段：VERIFY]`、`[阶段：TEST]`、`[阶段：DONE]`、`[阶段：REVIEW_BLOCKED]`；等待 Claude 分析时仍属于 `[阶段：ANALYSIS]`；`REVIEW` 只能在 IMPLEMENT 完成后出现
+- 当前 agent 暴露 `request_user_input` 或等价原生选择工具时，确认执行方案、确认结果和 Dev-Spec 选择必须调用工具；不支持时才文本兜底
+- 原生选择框选项必须映射真实下游分支，不得与客户端 free-form Other 重叠；修改意见、反馈意见和补充说明不要手写成按钮
+- 实施结果报告输出后必须等待用户确认结果；Claude review accept、测试通过、host 自检通过都不等于用户确认结果
 - ANALYSIS 方案必须按“核心必填 + 条件展开”输出；无关条件章节不要硬填
 - ANALYSIS 方案必须包含“改动范围”表，逐文件说明改动文件、改动类型、文件编码和改动核心内容
 - ANALYSIS 方案必须包含“待用户决策”和“验证与验收”，冲突存在时先等待用户拍板

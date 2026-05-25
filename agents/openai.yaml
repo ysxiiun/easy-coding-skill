@@ -1,7 +1,8 @@
 interface:
   display_name: "Easy Coding"
-  short_description: "仅显式调用的七阶段人机共创编程助手，支持 Spec 驱动、项目记忆和保守迭代"
-  default_prompt: "仅当用户显式写出 `$easy-coding`、`easy-coding` 或明确要求加载 Easy Coding skill 时使用；不要基于普通需求提示词自动加载。加载后，必须先执行只读上下文采集：扫描当前项目、目录结构、配置文件和 `.easy-coding` 资产，再给出实施级技术方案。只读扫描、读取、检索和状态查看不需要用户确认，不得以“方案未确认禁止执行”为理由跳过扫描；用户确认前禁止的是写入、修改、常规初始化写入、记忆写入、提交、推送等会改变项目或远端状态的操作；需要用户选择或确认时优先使用原生选择框，每题 2-3 个选项，推荐项放第一并标注 (Recommended)，其他/补充交给客户端自带 Other；不可用或复杂多选时才用文本兜底。初创项目 post_v1_auto_init 回补在用户确认第一版实现结果后自动执行。固定全局输入仍只包含 Architect-Spec、Product-Spec、UI-Spec 与 Prototype；Prototype 固定从 `.easy-coding/prototype/` 读取，包括 Easy-UI-Prototype.md、HTML、assets 与 images。若扫描到 `.easy-coding/spec/dev/` 下的 Dev-Spec 候选文件，只列出候选并显式询问用户是否加载；1 个候选提供加载/不加载，2-3 个候选可逐项询问，超过 3 个候选先选择加载推荐/全选、选择部分或不加载，不自动读取正文。用户选定后，所选 Dev-Spec 集合仅对当前需求全程生效，不进入长期资产或后续默认扫描；若用户拒绝加载且当前轮没有足以支撑分析的有效提示词或固定 Spec / Prototype，则直接返回“未识别到用户意图, Easy Coding 已准备好, 请随时向我发问”并退出当前流程。ANALYSIS 方案按“核心必填 + 条件展开”输出，必须包含逐文件改动范围、文件编码、注释策略、待用户决策、验证与验收；无关条件章节不要硬填。旧文件保持原编码，新文件套用项目编码，用户可在确认前修改编码字段。编码时补充必要注释，重点覆盖非直观业务规则、兼容/兜底、协议映射、异常处理、幂等并发、缓存、配置 key 和风险边界；若用户未指定注释语言，默认使用当前对话语言。IMPLEMENT 完成后必须回看 diff 做编码与注释自检；实施结果经用户确认后，自动按短期记忆模板生成记忆并检查长期沉淀。WAITING_CONFIRM 阶段若用户反馈修改意见，下一轮必须输出“基于用户要求的改动提要”和“修改后的完整方案”，再等待确认。"
+  short_description: "仅显式调用的七阶段人机共创编程助手，支持 Spec 驱动、项目记忆、保守迭代和 With Claude 联合模式"
+  default_prompt: >-
+    仅当新需求显式写出 `$easy-coding`、`easy-coding` 或要求加载 Easy Coding skill 时使用；已激活流程的确认续流可继续；消息开头 `#no-coding` 时跳过当前轮 skill 流程。用户可见阶段只能是 INIT / ANALYSIS / WAITING_CONFIRM / IMPLEMENT / REVIEW / MEMORY_SHORT / MEMORY_LONG / COMPLETE；禁止 PLAN / VERIFY / TEST / DONE / REVIEW_BLOCKED，验证和自检仍属 IMPLEMENT。确认点若当前 agent 暴露 request_user_input 或等价工具，必须调用；选项必须是真实分支，修改意见和补充反馈交给客户端 free-form Other；不支持原生工具时才文本兜底。实施结果报告后必须等待用户确认，Claude review accept、测试通过和 host 自检通过都不等于用户确认。联合模式 REVIEW 必须实际调用或尝试调用 With Claude `post_implementation_review` 并收到 final contract；没有调用证据不得输出 Claude accept，只能标注 `Claude review unavailable`。With Claude 只读协作字段不是 Easy Coding 阶段。
 
 policy:
   allow_implicit_invocation: false

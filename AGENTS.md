@@ -12,6 +12,7 @@
 |------|------|
 | `SKILL.md` | 技能主定义，AI 执行时加载 |
 | `flow/init.md` | 项目初始化流程 |
+| `flow/with-claude.md` | Easy Coding With Claude 联合模式编排 |
 | `templates/` | SOUL/RULES/ABSTRACT/MEMORY 模板 |
 
 ## 开发约定
@@ -20,6 +21,9 @@
 - 交流语言：简体中文
 - 阶段标注格式：`[阶段：XXXX]`（中文冒号）
 - 7 阶段：INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → MEMORY_SHORT → MEMORY_LONG → COMPLETE
+- 联合模式：仅当用户同时显式引用 Easy Coding 与 With Claude 时启用；IMPLEMENT 后增加 Claude 只读 REVIEW 插槽，最多 3 轮
+- `PLAN` / `VERIFY` / `TEST` / `DONE` / `REVIEW_BLOCKED` 不是 Easy Coding 阶段；Claude 分析等待态仍使用 `[阶段：ANALYSIS]`，验证与自检仍使用 `[阶段：IMPLEMENT]`，完成只能使用 `[阶段：COMPLETE]`
+- 版本号规则：第一位=重大功能更新，第二位=新功能或新优化迭代，第三位=Bug 修复
 - 若用户消息开头包含 `#no-coding`，则该轮跳过 easy-coding 全部流程与约束，下一轮恢复正常
 
 ## Git 忽略
