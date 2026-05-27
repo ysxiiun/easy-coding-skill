@@ -1,6 +1,6 @@
 ---
 name: easy-coding
-version: 4.2.0
+version: 4.3.0
 description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或要求加载 Easy Coding skill 时使用；已激活流程的确认续流可继续；若用户消息开头包含 `#no-coding`，当前轮跳过 skill 全部流程与约束。Spec 驱动的人机共创编程助手，支持固定阶段状态机、项目记忆、初创/迭代项目和 With Claude 联合模式。
 ---
 
@@ -355,6 +355,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 - 存在则读取，不存在则跳过
 - 若发现旧版记忆结构，必须回到 `INIT` 迁移确认门禁；未获用户确认前不得执行迁移、不得进入 `ANALYSIS`
 - 新版长期记忆以 `long/MEMORY.md` 为索引；`BUSINESS.md` / `TECHNICAL.md` 只在索引或本轮需求命中时读取，不把未命中的长期正文硬塞进方案
+- 默认只读取 `BUSINESS.md` / `TECHNICAL.md` 的有效记忆区和 `MEMORY.md` 中状态为 `active` 的主题；“已淘汰记录”默认不进入 `ANALYSIS` 上下文，仅在旧版迁移、冲突排查或用户追溯历史原因时读取
 - 短期记忆最多 10 条，允许全部读取；读取时优先看 frontmatter、业务记忆候选、技术记忆候选和不沉淀内容
 - Prototype 固定根目录为 `.easy-coding/prototype/`；不要到其他目录猜测原型产物
 - 原型 HTML 读取后只作为参考输入，绝不视为可直接落地的生产代码
@@ -1129,12 +1130,16 @@ REVIEW 结束后，回到 `IMPLEMENT` 完成报告，统一输出整体实施与
   - 业务概念、字段语义、业务流程、业务规则、上下游契约、业务排障经验 → `.easy-coding/memory/long/BUSINESS.md`
   - 架构决策、接口决策、工程规则、实现模式、易错点、验证/发布经验 → `.easy-coding/memory/long/TECHNICAL.md`
   - 普通任务流水、临时日志、一次性数据、无复用价值细节 → 不沉淀
+- 写入长期记忆前，必须加载并执行 `flow/memory-retirement.md`：
+  - 只围绕本轮窗口外短期命中的主题、`domain / tags / related_files / target_long`、`MEMORY.md` active 索引和对应长期有效区做定向淘汰检查
+  - 不做无边界全仓扫描，不默认读取“已淘汰记录”
+  - 对重复、冲突、过期内容按 `delete / merge / deprecate` 处理
 - 更新 `.easy-coding/memory/long/MEMORY.md` 索引，只保留主题、类型、关键词、详情文件、状态、最近更新和来源
 - 已存在一致内容时合并来源，不重复膨胀；已存在冲突内容时，优先当前代码和用户最新确认，旧内容进入已淘汰记录
 - 长期记忆更新成功后，仅删除本次已处理的窗口外旧短期记忆；最新 5 条继续保留在 `.easy-coding/memory/short/`
 
 输出两种分支：
-- 有沉淀：输出当前短期总数、本轮沉淀数量、保留文件清单、业务主题、技术主题、未沉淀原因、删除文件清单，并进入 COMPLETE
+- 有沉淀：输出当前短期总数、本轮沉淀数量、保留文件清单、业务主题、技术主题、未沉淀原因、淘汰检查摘要（删除条目、合并条目、淘汰条目、跳过原因）、删除文件清单，并进入 COMPLETE
 - 无沉淀：说明短期记忆不足 10 条并进入 COMPLETE
 
 ---

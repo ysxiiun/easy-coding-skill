@@ -24,7 +24,7 @@
 ## 记忆系统
 
 - 短期记忆：`.easy-coding/memory/short/` 目录，使用 `memory_schema: 2` 元数据和业务/技术候选区；单条记忆创建后不修改；达到 10 条时只沉淀窗口外旧短期，保留最新 5 条近期上下文
-- 长期记忆：`.easy-coding/memory/long/MEMORY.md` 为索引，`.easy-coding/memory/long/BUSINESS.md` 存业务记忆，`.easy-coding/memory/long/TECHNICAL.md` 存技术记忆
+- 长期记忆：`.easy-coding/memory/long/MEMORY.md` 为索引，`.easy-coding/memory/long/BUSINESS.md` 存业务记忆，`.easy-coding/memory/long/TECHNICAL.md` 存技术记忆；长期沉淀时按需执行定向淘汰检查，默认只读取 active 记忆，不读取已淘汰记录
 
 ## 项目信息
 
