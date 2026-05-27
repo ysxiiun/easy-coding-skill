@@ -23,7 +23,7 @@
 
 ## 记忆系统
 
-- 短期记忆：`.easy-coding/memory/short/` 目录，单条记忆创建后不修改；长期沉淀时允许删除已沉淀的旧短期记忆
+- 短期记忆：`.easy-coding/memory/short/` 目录，作为待沉淀任务记录；单条记忆创建后不修改，长期沉淀成功后删除已沉淀的全部短期记忆
 - 长期记忆：`.easy-coding/memory/long/MEMORY.md`，长度≤5000字符
 
 ## 项目信息
