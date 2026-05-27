@@ -156,6 +156,8 @@
    - `.easy-coding/RULES.md`
    - `.easy-coding/ABSTRACT.md`
    - `.easy-coding/memory/long/MEMORY.md`
+   - `.easy-coding/memory/long/BUSINESS.md`
+   - `.easy-coding/memory/long/TECHNICAL.md`
 4. 不覆盖已有 Spec、Prototype 和已确认代码成果
 5. 联合模式下，回补过程按 `flow/with-claude.md` 的 INIT 协作规则执行：Claude 只读草拟，host agent 合并和写入
 

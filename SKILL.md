@@ -1,6 +1,6 @@
 ---
 name: easy-coding
-version: 4.1.3
+version: 4.2.0
 description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或要求加载 Easy Coding skill 时使用；已激活流程的确认续流可继续；若用户消息开头包含 `#no-coding`，当前轮跳过 skill 全部流程与约束。Spec 驱动的人机共创编程助手，支持固定阶段状态机、项目记忆、初创/迭代项目和 With Claude 联合模式。
 ---
 
@@ -18,6 +18,7 @@ description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或要求�
 以下情况不属于“隐式触发”，而是上一轮 Easy Coding 状态机的继续；即使用户没有再次写 `$easy-coding`，也必须继续当前流程：
 
 - 上一轮停在 `WAITING_CONFIRM`，用户回复“确认 / ok / 开始 / 没问题”或点选“确认执行方案” → 进入 `IMPLEMENT`
+- 上一轮停在 `INIT` 的旧版记忆迁移确认，用户回复“确认 / ok / 开始 / 没问题”或点选“确认迁移” → 执行 `flow/memory-migration.md`，迁移完成后自动进入 `ANALYSIS`
 - 上一轮已输出实施结果报告并等待确认，用户回复“确认 / ok / 没问题 / 确认结果”或点选“确认结果” → 进入实施后续流转
 - 上一轮已经开始 `MEMORY_SHORT` / `MEMORY_LONG` / 初创项目初始化资产回补，但尚未输出 `COMPLETE` → 继续直到 `COMPLETE`
 
@@ -144,6 +145,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 - 创建、删除、移动、重命名文件或目录
 - 格式化、自动修复、代码生成、依赖安装、构建输出、测试写快照等可能写入文件的命令
 - 生成或更新 `.easy-coding/` 初始化资产、短期记忆、长期记忆
+- 旧版记忆兼容迁移（仅限 `.easy-coding/memory/`）
 - `git add` / `git commit` / `git push` 等提交或远端状态变更
 
 **使用任何写入 / 修改类操作前，必须完成以下检查：**
@@ -154,6 +156,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
   - REVIEW：仅联合模式在 IMPLEMENT 完成后使用；必须已有变更文件清单、验证结果和 host 自检结论；Claude 只能只读 review，若 verdict=fix 且修复仍在已确认方案范围内，可由 host agent 修复后重新 review
   - INIT / interactive_init：仅允许用户明确确认初始化后，按 flow/init.md 写入 .easy-coding/ 初始化资产
   - INIT / post_v1_auto_init：仅允许初创项目第一版实现结果已由用户确认，且首次任务为先交付第一版而跳过前置 INIT 后，按 flow/init.md 自动回补 .easy-coding/ 初始化资产
+  - INIT / legacy_memory_migration：仅当发现旧版记忆文件时，按 flow/memory-migration.md 渐进迁移 .easy-coding/memory/；不得改写业务代码、Spec 或 Prototype
   - MEMORY_SHORT / MEMORY_LONG：仅允许实施结果已由用户确认后，按记忆流程写入
   - 其他情况 → 禁止写入，输出阻断提示等待确认
 □ 用户是否已明确确认对应操作？
@@ -161,6 +164,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
   - 联合模式 review 修复：技术方案已确认，且 review 问题仍属于已确认改动范围
   - 常规初始化 interactive_init：用户已确认开始初始化
   - 初创项目初始化资产回补 post_v1_auto_init：用户已确认第一版实现结果，且该初创任务曾跳过前置 INIT
+  - 旧版记忆迁移 legacy_memory_migration：已在 `INIT` 阶段输出迁移提示并获得用户明确确认，且只写入 `.easy-coding/memory/`
   - 实施后记忆：用户已确认实施结果
   - 若否 → 禁止写入，输出阻断提示等待确认
 □ 本次操作是否在已确认的方案范围内？
@@ -333,20 +337,25 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 3. `.easy-coding/SOUL.md`
 4. `.easy-coding/RULES.md`
 5. `.easy-coding/ABSTRACT.md`
-6. `.easy-coding/memory/long/MEMORY.md`
-7. `.easy-coding/memory/short/*.md`
-8. `.easy-coding/spec/Architect-Spec.md`
-9. `.easy-coding/spec/Product-Spec.md`
-10. `.easy-coding/spec/UI-Spec.md`
-11. `.easy-coding/prototype/Easy-UI-Prototype.md`
-12. `.easy-coding/prototype/index.html` 与 `.easy-coding/prototype/` 下的页面 HTML 文件
-13. `.easy-coding/prototype/assets/` 下与原型行为、样式或 mock 数据相关的资源文件
-14. `.easy-coding/prototype/images/` 下的 AI 原生生图原型图片
-15. 扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件（仅扫描文件名，不自动读取正文）
+6. `.easy-coding/memory/long/MEMORY.md`（先轻量探测 `memory_schema` 与索引）
+7. `.easy-coding/memory/long/BUSINESS.md`（仅当索引或本轮需求命中业务记忆时读取）
+8. `.easy-coding/memory/long/TECHNICAL.md`（仅当索引或本轮需求命中技术记忆时读取）
+9. `.easy-coding/memory/short/*.md`
+10. `.easy-coding/spec/Architect-Spec.md`
+11. `.easy-coding/spec/Product-Spec.md`
+12. `.easy-coding/spec/UI-Spec.md`
+13. `.easy-coding/prototype/Easy-UI-Prototype.md`
+14. `.easy-coding/prototype/index.html` 与 `.easy-coding/prototype/` 下的页面 HTML 文件
+15. `.easy-coding/prototype/assets/` 下与原型行为、样式或 mock 数据相关的资源文件
+16. `.easy-coding/prototype/images/` 下的 AI 原生生图原型图片
+17. 扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件（仅扫描文件名，不自动读取正文）
 
 ## 读取规则
 
 - 存在则读取，不存在则跳过
+- 若发现旧版记忆结构，必须回到 `INIT` 迁移确认门禁；未获用户确认前不得执行迁移、不得进入 `ANALYSIS`
+- 新版长期记忆以 `long/MEMORY.md` 为索引；`BUSINESS.md` / `TECHNICAL.md` 只在索引或本轮需求命中时读取，不把未命中的长期正文硬塞进方案
+- 短期记忆最多 10 条，允许全部读取；读取时优先看 frontmatter、业务记忆候选、技术记忆候选和不沉淀内容
 - Prototype 固定根目录为 `.easy-coding/prototype/`；不要到其他目录猜测原型产物
 - 原型 HTML 读取后只作为参考输入，绝不视为可直接落地的生产代码
 - 解析 `.easy-coding/prototype/Easy-UI-Prototype.md` 后，应尽可能读取其中引用的 HTML 文件；若文档未列全，则继续扫描 `.easy-coding/prototype/` 下的 HTML 文件
@@ -463,11 +472,63 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 □ .easy-coding/RULES.md
 □ .easy-coding/ABSTRACT.md
 □ .easy-coding/memory/long/MEMORY.md
+□ .easy-coding/memory/long/BUSINESS.md
+□ .easy-coding/memory/long/TECHNICAL.md
 ```
 
-## 1.2 初始化分支
+若仅缺失 `BUSINESS.md` / `TECHNICAL.md`，或 `MEMORY.md` 缺少 `memory_schema: 2`，不直接判定为初始化失败；应进入下方旧版记忆迁移确认门禁。
 
-### 情况 A：全部存在且有效
+## 1.2 旧版记忆迁移确认门禁
+
+INIT 阶段必须在输出背景摘要、进入 `ANALYSIS` 之前，先对记忆结构做轻量迁移探测。探测只允许读取文件存在性、`MEMORY.md` frontmatter / 索引特征、短期记忆 frontmatter，不执行写入。
+
+满足任一条件即判定需要迁移：
+
+- `.easy-coding/memory/long/MEMORY.md` 存在但缺少 `memory_schema: 2`
+- `.easy-coding/memory/long/BUSINESS.md` 缺失
+- `.easy-coding/memory/long/TECHNICAL.md` 缺失
+- `.easy-coding/memory/short/*.md` 存在缺少 frontmatter 或 `memory_schema != 2` 的旧版短期记忆
+- `MEMORY.md` 仍是旧版长期正文，而非新版索引导航
+
+若需要迁移：
+
+- 必须停留在 `[阶段：INIT]`
+- 不得进入 `ANALYSIS`
+- 不得静默执行迁移
+- 必须提示用户确认迁移；若当前 agent 暴露 `request_user_input` 或等价原生选择工具，优先提供“确认迁移 (Recommended) / 暂不迁移”
+
+输出模板：
+
+```markdown
+[阶段：INIT]
+
+⚠️ 检测到旧版记忆结构，需要迁移后再继续分析
+
+- 旧版长期记忆：{MEMORY.md schema / 索引状态；无则写“无”}
+- 缺失的新长期文件：{BUSINESS.md / TECHNICAL.md；无则写“无”}
+- 旧版短期记忆：{旧版短期文件数量与示例；无则写“无”}
+- 迁移范围：仅 `.easy-coding/memory/`
+- 迁移结果：旧长期拆分为 MEMORY / BUSINESS / TECHNICAL；短期记忆一次性沉淀，成功后删除已处理短期文件
+
+是否确认执行记忆迁移？确认后将执行 `flow/memory-migration.md`，完成后自动进入 ANALYSIS。
+```
+
+用户确认迁移后：
+
+1. 读取并执行 `flow/memory-migration.md`
+2. 输出迁移审计摘要
+3. 重新按新版三文件记忆结构加载背景
+4. 自动进入 `ANALYSIS`
+
+用户选择暂不迁移时：
+
+- 保持 `[阶段：INIT]` 阻断
+- 不进入 `ANALYSIS`
+- 说明旧版记忆结构未迁移，无法保证后续记忆读取一致性
+
+## 1.3 初始化分支
+
+### 情况 A：全部存在且有效，且迁移门禁未命中
 输出背景摘要后进入 ANALYSIS。
 
 ### 情况 B：缺失
@@ -491,7 +552,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 - 若是常规初始化，按交互式初始化执行
 - 若是初创项目第一版开发后的初始化资产回补，则按 `post_v1_auto_init` 语义执行
 
-## 1.3 输出背景摘要
+## 1.4 输出背景摘要
 
 ```markdown
 [阶段：INIT]
@@ -499,7 +560,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 ✅ 背景加载完成
 - 项目模式：{初创项目/迭代项目}
 - 项目架构：{已读取/已初始化}
-- 历史记忆：{N} 条短期记忆
+- 历史记忆：{memory_schema 版本；迁移状态；N 条短期记忆；命中的业务/技术长期主题}
 - 编码规范：{已加载}
 
 若当前为迭代项目，请描述您的需求，我将为您分析技术方案。
@@ -541,9 +602,13 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 - `.easy-coding/RULES.md`
 - `.easy-coding/ABSTRACT.md`
 - `.easy-coding/memory/long/MEMORY.md`
+- `.easy-coding/memory/long/BUSINESS.md`（按索引或需求命中读取）
+- `.easy-coding/memory/long/TECHNICAL.md`（按索引或需求命中读取）
 - `.easy-coding/memory/short/*.md`
 - 发现到的 Spec / Prototype 文档 / Prototype HTML / Prototype 图片 / Prototype assets
 - 当前需求已选 Dev-Spec（若有）
+
+若长期记忆缺少 `memory_schema: 2`、缺少 `BUSINESS.md` / `TECHNICAL.md`，或发现短期记忆缺少 frontmatter / `memory_schema != 2`，必须回到 `INIT` 旧版记忆迁移确认门禁；用户确认后按 `flow/memory-migration.md` 迁移，再继续正式分析。旧版短期迁移是一次性升级动作，不保留旧短期滑动窗口。
 
 若当前为 `初创项目` 且用户没有补充额外需求，必须默认把 Spec / Prototype 视为本轮主要需求来源。
 
@@ -677,8 +742,9 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 ```markdown
 ### 背景数据应用
 - 相关架构：{引用 ABSTRACT.md 与当前代码现状}
-- 历史决策：{引用长期记忆；若无相关内容则填“无”}
-- 可复用经验：{引用历史经验；若无相关内容则填“无”}
+- 业务记忆：{引用 BUSINESS.md 中命中的业务域、字段语义、流程或规则；若无相关内容则填“无”}
+- 技术记忆：{引用 TECHNICAL.md 中命中的架构决策、工程规则、实现模式或易错点；若无相关内容则填“无”}
+- 记忆冲突：{若记忆与当前代码或用户最新表达冲突，说明冲突并以当前代码/用户最新表达为准；无则填“无”}
 - 规范约束：{引用 RULES.md 中相关强制规范}
 ```
 
@@ -1033,7 +1099,9 @@ REVIEW 结束后，回到 `IMPLEMENT` 完成报告，统一输出整体实施与
 
 - 文件名规则：`{序号}_{日期}_{智能命名}.md`
 - 内容模板：读取并遵循 `templates/SHORT_MEMORY.md`
-- 记录任务概述、技术方案摘要、变更内容、问题与解决方案、技术决策、未尽事项、关联记忆
+- 必须写入 `memory_schema: 2` frontmatter，包含 `id / date / task_type / project_mode / domain / tags / related_files / commit / verification / memory_value / target_long`
+- 正文必须记录任务摘要、执行证据、业务记忆候选、技术记忆候选、不沉淀内容、关联记忆
+- `target_long=BUSINESS / TECHNICAL / BOTH / NONE` 只作为未来进入滑动窗口外时的沉淀建议，后续沉淀仍需结合正文和当前代码复核
 
 输出：
 
@@ -1049,15 +1117,24 @@ REVIEW 结束后，回到 `IMPLEMENT` 完成报告，统一输出整体实施与
 
 # 【阶段 6】MEMORY_LONG - 长期记忆沉淀
 
-> 短期记忆生成完成后自动检查；短期记忆≥10 条时自动沉淀，无需再次确认
+> 短期记忆生成完成后自动检查；短期记忆≥10 条时自动沉淀，无需再次确认。短期记忆采用滑动窗口：最新 5 条保留为近期细节上下文，不参与本轮沉淀。
 
-- 读取当前全部短期记忆
-- 将全部短期记忆提炼为架构决策、技术选型、可复用经验、业务规则
-- 更新 `.easy-coding/memory/long/MEMORY.md`
-- 长期记忆更新成功后，删除本次已沉淀的全部短期记忆文件
+- 读取当前全部短期记忆并排序：
+  - 优先按 frontmatter `date` 升序
+  - 缺少 `date`、`date` 无法可靠解析或 `date` 相同时，降级按文件名前缀序号升序
+  - 仍无法区分时，按文件名升序稳定排序
+- 若短期记忆 <10 条：不沉淀、不删除，直接进入 COMPLETE
+- 若短期记忆 ≥10 条：保留排序后的最新 5 条；只沉淀窗口外旧短期记忆
+- 对窗口外旧短期按 frontmatter 和正文分拣：
+  - 业务概念、字段语义、业务流程、业务规则、上下游契约、业务排障经验 → `.easy-coding/memory/long/BUSINESS.md`
+  - 架构决策、接口决策、工程规则、实现模式、易错点、验证/发布经验 → `.easy-coding/memory/long/TECHNICAL.md`
+  - 普通任务流水、临时日志、一次性数据、无复用价值细节 → 不沉淀
+- 更新 `.easy-coding/memory/long/MEMORY.md` 索引，只保留主题、类型、关键词、详情文件、状态、最近更新和来源
+- 已存在一致内容时合并来源，不重复膨胀；已存在冲突内容时，优先当前代码和用户最新确认，旧内容进入已淘汰记录
+- 长期记忆更新成功后，仅删除本次已处理的窗口外旧短期记忆；最新 5 条继续保留在 `.easy-coding/memory/short/`
 
 输出两种分支：
-- 有沉淀：更新摘要并进入 COMPLETE
+- 有沉淀：输出当前短期总数、本轮沉淀数量、保留文件清单、业务主题、技术主题、未沉淀原因、删除文件清单，并进入 COMPLETE
 - 无沉淀：说明短期记忆不足 10 条并进入 COMPLETE
 
 ---

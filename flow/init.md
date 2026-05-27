@@ -54,7 +54,9 @@
 | 5 | `.easy-coding/SOUL.md` | `templates/SOUL.md` | 项目灵魂文件 |
 | 6 | `.easy-coding/RULES.md` | `templates/RULES.md` | 编码规范文件 |
 | 7 | `.easy-coding/ABSTRACT.md` | 分析生成 | 架构摘要文件 |
-| 8 | `.easy-coding/memory/long/MEMORY.md` | `templates/MEMORY.md` | 长期记忆文件 |
+| 8 | `.easy-coding/memory/long/MEMORY.md` | `templates/MEMORY.md` | 长期记忆索引 |
+| 9 | `.easy-coding/memory/long/BUSINESS.md` | `templates/BUSINESS.md` | 业务记忆文件 |
+| 10 | `.easy-coding/memory/long/TECHNICAL.md` | `templates/TECHNICAL.md` | 技术记忆文件 |
 
 ---
 
@@ -149,14 +151,19 @@
 
 ---
 
-### 步骤 5：初始化 MEMORY.md
+### 步骤 5：初始化长期记忆文件
 
-来源：`templates/MEMORY.md`
+来源：
+- `templates/MEMORY.md`
+- `templates/BUSINESS.md`
+- `templates/TECHNICAL.md`
 
 执行要求：
 1. 拷贝模板到 `.easy-coding/memory/long/MEMORY.md`
-2. 预填充日期字段
-3. 验证文件创建成功
+2. 拷贝模板到 `.easy-coding/memory/long/BUSINESS.md`
+3. 拷贝模板到 `.easy-coding/memory/long/TECHNICAL.md`
+4. 预填充日期字段，保留 `memory_schema: 2`
+5. 验证三个文件创建成功
 
 ---
 
@@ -175,7 +182,9 @@
 2. ✅ .easy-coding/SOUL.md - 项目灵魂
 3. ✅ .easy-coding/RULES.md - 语言编码规范
 4. ✅ .easy-coding/ABSTRACT.md - 架构摘要
-5. ✅ .easy-coding/memory/long/MEMORY.md - 长期记忆
+5. ✅ .easy-coding/memory/long/MEMORY.md - 长期记忆索引
+6. ✅ .easy-coding/memory/long/BUSINESS.md - 业务记忆
+7. ✅ .easy-coding/memory/long/TECHNICAL.md - 技术记忆
 
 说明：
 - 当前模式：{interactive_init/post_v1_auto_init}
