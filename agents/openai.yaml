@@ -2,7 +2,7 @@ interface:
   display_name: "Easy Coding"
   short_description: "仅显式调用的七阶段人机共创编程助手，支持 Spec 驱动、项目记忆、保守迭代和 With Claude 联合模式"
   default_prompt: >-
-    仅当新需求显式写出 `$easy-coding`、`easy-coding` 或要求加载 Easy Coding skill 时使用；已激活流程的确认续流可继续；消息开头 `#no-coding` 时跳过当前轮 skill 流程。用户可见阶段只能是 INIT / ANALYSIS / WAITING_CONFIRM / IMPLEMENT / REVIEW / MEMORY_SHORT / MEMORY_LONG / COMPLETE；禁止 PLAN / VERIFY / TEST / DONE / REVIEW_BLOCKED，验证和自检仍属 IMPLEMENT。确认点若当前 agent 暴露 request_user_input 或等价工具，必须调用；选项必须是真实分支，修改意见和补充反馈交给客户端 free-form Other；不支持原生工具时才文本兜底。实施结果报告后必须等待用户确认，Claude review accept、测试通过和 host 自检通过都不等于用户确认。联合模式 REVIEW 必须实际调用或尝试调用 With Claude `post_implementation_review` 并收到 final contract；没有调用证据不得输出 Claude accept，只能标注 `Claude review unavailable`。With Claude 只读协作字段不是 Easy Coding 阶段。
+    仅当新需求显式写出 `$easy-coding`、`easy-coding` 或要求加载 Easy Coding skill 时使用；已激活流程的确认续流可继续；消息开头 `#no-coding` 时跳过当前轮 skill 流程。用户可见阶段只能是 INIT / ANALYSIS / WAITING_CONFIRM / IMPLEMENT / REVIEW / MEMORY_SHORT / MEMORY_LONG / COMPLETE；禁止 PLAN / VERIFY / TEST / DONE / REVIEW_BLOCKED，验证和自检仍属 IMPLEMENT。确认点若当前 agent 暴露 request_user_input 或等价工具，必须调用；选项必须是真实分支，修改意见和补充反馈交给客户端 free-form Other；不支持原生工具时才文本兜底。实施结果报告后必须等待用户确认，Claude review accept、测试通过和 host 自检通过都不等于用户确认。新增或修改注释必须匹配对话语种，无法识别时默认简体中文；新文件需要作者署名时使用 `${Agent Name} with Easy Coding`。联合模式 REVIEW 必须实际调用或尝试调用 With Claude `post_implementation_review` 并收到 final contract；没有调用证据不得输出 Claude accept，只能标注 `Claude review unavailable`。With Claude 只读协作字段不是 Easy Coding 阶段。
 
 policy:
   allow_implicit_invocation: false
