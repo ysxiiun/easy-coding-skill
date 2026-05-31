@@ -1,6 +1,6 @@
-# CLAUDE.md
+# GEMINI.md
 
-本文档为 Claude Code (claude.ai/code) 在此代码仓库中工作提供指引。
+本文档为 Antigravity / Gemini 系 agent 在此代码仓库中工作提供指引。
 
 ## 项目概述
 
@@ -29,7 +29,6 @@
 ## Git 忽略
 
 - `.easy-coding/` - 运行时生成的项目配置
-- `.claude/` - Claude Code 记忆系统
 - `.gemini/` - Gemini / Antigravity 运行时配置
 - `.antigravitycli/` - Antigravity CLI 项目配置
 - `.qoder/` - Qoder 平台配置

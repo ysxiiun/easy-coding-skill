@@ -30,4 +30,6 @@
 
 - `.easy-coding/` - 运行时生成的项目配置
 - `.codex/` - Codex 记忆系统
+- `.gemini/` - Gemini / Antigravity 运行时配置
+- `.antigravitycli/` - Antigravity CLI 项目配置
 - `.qoder/` - Qoder 平台配置
