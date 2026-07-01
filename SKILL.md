@@ -1,7 +1,8 @@
 ---
 name: easy-coding
-version: 4.3.2
 description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或要求加载 Easy Coding skill 时使用；已激活流程的确认续流可继续；若用户消息开头包含 `#no-coding`，当前轮跳过 skill 全部流程与约束。Spec 驱动的人机共创编程助手，支持固定阶段状态机、项目记忆、初创/迭代项目和 With Claude 联合模式。
+metadata:
+  version: 4.3.3
 ---
 
 # 🔴 核心约束（每轮对话必须遵守）
@@ -144,7 +145,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 - 使用 `apply_patch` 或其他方式写入文件
 - 创建、删除、移动、重命名文件或目录
 - 格式化、自动修复、代码生成、依赖安装、构建输出、测试写快照等可能写入文件的命令
-- 生成或更新 `.easy-coding/` 初始化资产、短期记忆、长期记忆
+- 生成或更新 `.easy-coding/` 初始化资产、短期记忆、长期记忆沉淀结果
 - 旧版记忆兼容迁移（仅限 `.easy-coding/memory/`）
 - `git add` / `git commit` / `git push` 等提交或远端状态变更
 
@@ -157,7 +158,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
   - INIT / interactive_init：仅允许用户明确确认初始化后，按 flow/init.md 写入 .easy-coding/ 初始化资产
   - INIT / post_v1_auto_init：仅允许初创项目第一版实现结果已由用户确认，且首次任务为先交付第一版而跳过前置 INIT 后，按 flow/init.md 自动回补 .easy-coding/ 初始化资产
   - INIT / legacy_memory_migration：仅当发现旧版记忆文件时，按 flow/memory-migration.md 渐进迁移 .easy-coding/memory/；不得改写业务代码、Spec 或 Prototype
-  - MEMORY_SHORT / MEMORY_LONG：仅允许实施结果已由用户确认后，按记忆流程写入
+  - MEMORY_SHORT / MEMORY_LONG：仅允许实施结果已由用户确认后，按记忆流程写入；必须先生成本轮短期记忆，再检查长期沉淀条件
   - 其他情况 → 禁止写入，输出阻断提示等待确认
 □ 用户是否已明确确认对应操作？
   - 技术实现：用户已确认技术方案
@@ -1014,8 +1015,8 @@ EASY-CODING 已完成代码编写，请您检查代码变动，如有不妥，�
 
 ⚠️ 确认后将自动执行：
 - 联合模式：Claude Review 结论已纳入本报告；确认后按项目模式继续实施后续流转，不停留在 REVIEW
-- 初创项目：如本轮跳过了前置 INIT，则初始化资产回补 → 短期记忆生成 → 长期记忆沉淀
-- 迭代项目：短期记忆生成 → 长期记忆沉淀
+- 初创项目：如本轮跳过了前置 INIT，则初始化资产回补 → 短期记忆生成 → 长期记忆沉淀检查
+- 迭代项目：短期记忆生成 → 长期记忆沉淀检查
 ⚠️ 在用户确认结果前，禁止生成短期记忆。
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
@@ -1104,11 +1105,16 @@ REVIEW 结束后，回到 `IMPLEMENT` 完成报告，统一输出整体实施与
 
 > 仅在实施结果报告之后收到用户确认时进入；同一轮输出实施结果报告时不得进入本阶段。进入后自动生成短期记忆，无需二次确认。
 
+- 进入本阶段必须先确保 `.easy-coding/memory/short/` 存在；若目录缺失，按当前项目编码创建目录，不得因此跳过短期记忆。
+- 每次用户确认实施结果后，必须为本轮任务新增 1 条 schema 2 短期记忆；短期记忆是本轮任务的落盘凭证，不得用直接更新长期记忆替代。
 - 文件名规则：`{序号}_{日期}_{智能命名}.md`
+  - 序号取当前 `.easy-coding/memory/short/` 下已有短期文件最大数字前缀 + 1；无短期文件时从 `001` 开始。
+  - 日期使用当前自然日 `YYYYMMDD`；智能命名使用可读短横线或中文短语，避免空格和特殊符号。
 - 内容模板：读取并遵循 `templates/SHORT_MEMORY.md`
 - 必须写入 `memory_schema: 2` frontmatter，包含 `id / date / task_type / project_mode / domain / tags / related_files / commit / verification / memory_value / target_long`
 - 正文必须记录任务摘要、执行证据、业务记忆候选、技术记忆候选、不沉淀内容、关联记忆
 - `target_long=BUSINESS / TECHNICAL / BOTH / NONE` 只作为未来进入滑动窗口外时的沉淀建议，后续沉淀仍需结合正文和当前代码复核
+- 写入后必须重新读取或确认该短期文件存在，且 frontmatter 含 `memory_schema: 2`；验证失败时停留在 `MEMORY_SHORT` 并修复短期文件，不得进入 `MEMORY_LONG`。
 
 输出：
 
@@ -1122,16 +1128,17 @@ REVIEW 结束后，回到 `IMPLEMENT` 完成报告，统一输出整体实施与
 
 ---
 
-# 【阶段 6】MEMORY_LONG - 长期记忆沉淀
+# 【阶段 6】MEMORY_LONG - 长期记忆沉淀检查
 
-> 短期记忆生成完成后自动检查；短期记忆≥10 条时自动沉淀，无需再次确认。短期记忆采用滑动窗口：最新 5 条保留为近期细节上下文，不参与本轮沉淀。
+> 仅在本轮 schema 2 短期记忆已成功落盘并验证后进入；短期记忆生成完成后自动检查。短期记忆 ≥10 条时自动沉淀，无需再次确认。短期记忆采用滑动窗口：最新 5 条保留为近期细节上下文，不参与本轮沉淀。
 
+- 进入本阶段前必须有“本轮短期记忆文件名”作为凭证；若没有本轮短期文件，必须回到 `MEMORY_SHORT` 生成，不得直接写入 `.easy-coding/memory/long/*`。
 - 读取当前全部短期记忆并排序：
   - 优先按 frontmatter `date` 升序
   - 缺少 `date`、`date` 无法可靠解析或 `date` 相同时，降级按文件名前缀序号升序
   - 仍无法区分时，按文件名升序稳定排序
-- 若短期记忆 <10 条：不沉淀、不删除，直接进入 COMPLETE
-- 若短期记忆 ≥10 条：保留排序后的最新 5 条；只沉淀窗口外旧短期记忆
+- 若短期记忆 <10 条：不沉淀、不删除、不得写入 `.easy-coding/memory/long/MEMORY.md` / `BUSINESS.md` / `TECHNICAL.md`，直接进入 COMPLETE
+- 若短期记忆 ≥10 条：保留排序后的最新 5 条；只沉淀窗口外旧短期记忆；若不存在窗口外旧短期，则不沉淀、不删除
 - 对窗口外旧短期按 frontmatter 和正文分拣：
   - 业务概念、字段语义、业务流程、业务规则、上下游契约、业务排障经验 → `.easy-coding/memory/long/BUSINESS.md`
   - 架构决策、接口决策、工程规则、实现模式、易错点、验证/发布经验 → `.easy-coding/memory/long/TECHNICAL.md`
@@ -1146,7 +1153,7 @@ REVIEW 结束后，回到 `IMPLEMENT` 完成报告，统一输出整体实施与
 
 输出两种分支：
 - 有沉淀：输出当前短期总数、本轮沉淀数量、保留文件清单、业务主题、技术主题、未沉淀原因、淘汰检查摘要（删除条目、合并条目、淘汰条目、跳过原因）、删除文件清单，并进入 COMPLETE
-- 无沉淀：说明短期记忆不足 10 条并进入 COMPLETE
+- 无沉淀：说明本轮短期记忆文件、当前短期总数、未写入长期记忆的原因（短期记忆不足 10 条或无窗口外旧短期），并进入 COMPLETE
 
 ---
 

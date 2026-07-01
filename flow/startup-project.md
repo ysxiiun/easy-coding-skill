@@ -155,19 +155,22 @@
    - `.easy-coding/SOUL.md`
    - `.easy-coding/RULES.md`
    - `.easy-coding/ABSTRACT.md`
+   - `.easy-coding/memory/short/`
    - `.easy-coding/memory/long/MEMORY.md`
    - `.easy-coding/memory/long/BUSINESS.md`
    - `.easy-coding/memory/long/TECHNICAL.md`
 4. 不覆盖已有 Spec、Prototype 和已确认代码成果
-5. 联合模式下，回补过程按 `flow/with-claude.md` 的 INIT 协作规则执行：Claude 只读草拟，host agent 合并和写入
+5. 回补长期记忆三文件只代表初始化资产可用，不代表本轮任务已沉淀长期记忆
+6. 联合模式下，回补过程按 `flow/with-claude.md` 的 INIT 协作规则执行：Claude 只读草拟，host agent 合并和写入
 
 ### 6. MEMORY_SHORT → MEMORY_LONG → COMPLETE
 
 初始化资产回补完成后：
 
 1. 进入 `MEMORY_SHORT`
-2. 再进入 `MEMORY_LONG`
-3. 最后输出 `COMPLETE`
+2. 必须先新增本轮 schema 2 短期记忆并验证文件已落盘
+3. 再进入 `MEMORY_LONG` 做长期沉淀检查
+4. 最后输出 `COMPLETE`
 
 ---
 
