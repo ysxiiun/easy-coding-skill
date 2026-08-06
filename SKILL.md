@@ -2,7 +2,7 @@
 name: easy-coding
 description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或要求加载 Easy Coding skill 时使用；已激活流程的确认续流可继续；若用户消息开头包含 `#no-coding`，当前轮跳过 skill 全部流程与约束。Spec 驱动的人机共创编程助手，支持固定阶段状态机、项目记忆、初创/迭代项目和 With Claude 联合模式。
 metadata:
-  version: 4.3.3
+  version: 5.0.0
 ---
 
 # 🔴 核心约束（每轮对话必须遵守）
@@ -131,12 +131,13 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 - 使用 `rg` / `find` / `ls` / `pwd` / `cat` / `sed -n` 等只读命令理解项目
 - 读取 `.easy-coding/` 固定资产与 Spec / Prototype 输入
 - 仅扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件名
+- 用户选定 Dev-Spec 后调用当前已加载 Skill 根目录下的 `scripts/inspect_dev_spec.py`，做只读 manifest、仓库、任务和基线检查
 - 查看 `git status` / `git diff` / `git log` 等只读状态与历史
 
 **规则：**
 - 在项目模式判定、INIT 背景加载、输入发现、ANALYSIS 技术方案分析中，只读上下文采集不需要用户确认，且必须主动执行。
 - 不得以“方案未确认禁止执行”为理由拒绝只读扫描；正确行为是先完成只读扫描，再输出阶段状态、初始化缺失项或技术方案。
-- Dev-Spec 候选目录在用户选择前只能扫描文件名，不能读取正文。
+- Dev-Spec 候选目录在用户选择前只能扫描文件名，不能读取正文；选中 Canonical Spec 后只把脚本返回的消费闭包加载到上下文。
 
 ### 写入 / 修改类操作（必须阻断到确认后）
 
@@ -207,6 +208,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 - Easy Coding With Claude 联合模式：读取 `flow/with-claude.md`
 - 普通初始化或初始化资产回补：读取 `flow/init.md`
 - 初创项目：读取 `flow/startup-project.md`
+- 选中 `easy-dev-spec/v1` Canonical Spec：读取 `references/dev-spec/canonical-v1.md`
 - 前端设计任务：按需读取 `references/design/apple-design-reference.md`
 - 涉及前端页面、界面、交互、样式、组件、视觉升级时：
   - 优先启用 `frontend-skill`
@@ -331,7 +333,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 
 # 📥 输入发现规则
 
-进入 ANALYSIS 前，必须按以下顺序发现上下文。除 Dev-Spec 正文读取需要用户选择外，以下发现与读取均属于只读上下文采集，允许在方案确认前执行：
+进入 ANALYSIS 前，必须按以下顺序发现上下文。除 Dev-Spec 候选需要用户选择外，以下发现与读取均属于只读上下文采集，允许在方案确认前执行：
 
 1. 用户当前提示词
 2. 当前项目代码、目录结构、配置文件
@@ -350,6 +352,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 15. `.easy-coding/prototype/assets/` 下与原型行为、样式或 mock 数据相关的资源文件
 16. `.easy-coding/prototype/images/` 下的 AI 原生生图原型图片
 17. 扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件（仅扫描文件名，不自动读取正文）
+18. 若用户显式引用任意具体 Markdown Dev-Spec 路径，直接将其作为当前候选
 
 ## 读取规则
 
@@ -370,6 +373,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 
 - `.easy-coding/spec/dev/` 仅作为运行时候选目录，不属于固定全局 Spec 输入。
 - 扫描时只列出候选 Markdown 文件，不自动读取正文；候选按相对路径字典序稳定排序并生成 1 开始的编号。
+- 用户显式引用具体 Dev-Spec 路径时，直接使用该路径，不再要求按编号二次选择。
 - 若发现候选文件，且当前需求尚未选定 Dev-Spec：
   - 在 `ANALYSIS` 阶段先输出短提示，并必须列出完整候选编号清单；只显示数量、不显示文件名视为失败。
   - 选择协议统一为编号多选：`1,3` 表示加载第 1 和第 3 个文件，`1-3` 表示加载连续区间，`all` / `全部` 表示加载全部，`none` / `不加载` 表示不加载。
@@ -377,21 +381,28 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
   - 若原生选择工具不可用，使用文本兜底，但仍必须先打印完整编号清单，并提示用户按编号回复，例如 `1,3`、`1-3`、`全部` 或 `不加载`。
   - 若用户输入无法解析、编号越界或没有命中任何候选，必须重新展示候选清单并等待选择；不得读取正文，不得进入正式技术方案分析。
   - 在用户明确选择前，不读取任何 Dev-Spec 正文，不进入正式技术方案分析。
-- 若用户明确选择一个或多个 Dev-Spec：
-  - 立即读取所选文件集合。
-  - 将其标记为“当前需求已选 Dev-Spec 集合”。
-  - 直接进入正式分析，不再要求用户补充需求描述。
+- 用户选定文件后，先解析本 `SKILL.md` 所在目录为 `<easy-coding-skill-dir>`，运行 `python3 <easy-coding-skill-dir>/scripts/inspect_dev_spec.py <spec-path> --repo-root <repo-root> --manifest-only` 探测协议；不得从业务仓库 cwd 猜测脚本路径，也不得先把任务正文读入 Agent 上下文：
+  - 返回 `legacy`：保留现有多文件选择能力，读取所选 legacy 文件全文并进入正式分析。
+  - 返回 `canonical-v1`：一轮需求只允许激活一份 Canonical Spec；立即读取并遵循 `references/dev-spec/canonical-v1.md`，继续仓库识别与 task 选择。
+  - 返回 `RepositoryAmbiguityError` 且包含 `candidates`：展示候选 `repo_id / name / remote_urls / path_hint` 并等待用户确认；确认后先用 `--manifest-only --repo-path <repo-id>=<repo-root>` 重新取得 task catalog，完成 task 选择后在完整检查命令中保留同一 repo path；不得替用户猜测。
+  - 返回不支持的 schema、非法 manifest 或仓库零匹配：明确报告错误并停止消费；不得按 legacy 降级。
+  - 同时选择多份文件且其中包含 Canonical Spec：保留 legacy 文件但不加载正文，要求用户选择一份 Canonical Spec 作为当前需求的唯一任务空间。
+- Canonical Spec 路由完成后：
+  - 用户明确 task ID 时用重复的 `--task <task-id>` 运行完整检查；用户明确要求完成当前仓库时才允许不传 `--task` 选择该仓全部 READY task。
+  - 只把脚本返回的 `scope_markdown` 作为当前需求已选 Dev-Spec 上下文。
+  - 记录 `spec_id`、`source_sha256`、`selected_task_ids`、`repo_ids`、`dependency_gaps`、`baseline_status` 和 `scope_sha256`。
+  - 不读取未选 task 的正文，不重新要求用户描述已由选中 task 明确表达的需求。
 - 若用户明确表示“不加载”：
   - 若当前轮也没有任何足以支撑分析的有效提示词，且不存在可补足上下文的固定 Spec / Prototype 输入，直接输出：
     - `未识别到用户意图, Easy Coding 已准备好, 请随时向我发问`
     - 当前轮到此结束，不进入 `WAITING_CONFIRM`，不产出技术方案。
   - 否则继续按现有流程分析。
   - 但必须在分析结果中标注具体“未加载 Dev-Spec”文件列表。
-- 已选 Dev-Spec 的生命周期仅限当前需求：
+- 已选 Dev-Spec、Canonical task 选择、`source_sha256` 与 `scope_sha256` 的生命周期仅限当前需求：
   - 从本次 `ANALYSIS` 开始，持续到该需求结束或用户明确切换/清空为止。
   - 不写入 `.easy-coding/spec/` 固定输入集合。
   - 不写入 `.easy-coding/memory/`，不作为后续需求默认输入。
-  - 若用户在需求中途切换 Dev-Spec，视为需求变更，必须回到 `ANALYSIS` 并用新的已选集合重新输出方案。
+  - 若用户在需求中途切换 Dev-Spec、task 或 repo path，视为需求变更；必须重新运行检查脚本，回到 `ANALYSIS` 并用新的闭包重新输出方案。
 
 ## 前端任务附加读取
 
@@ -444,9 +455,9 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 - 在用户拍板前，不得进入 IMPLEMENT
 
 ### Dev-Spec vs 固定 Spec / 现有代码
-- 若当前需求已选 Dev-Spec 集合，必须检查其与固定 Spec、现有代码是否冲突
+- 若当前需求已选 Dev-Spec 或 Canonical task 集合，必须检查其与固定 Spec、现有代码是否冲突
 - 若冲突会影响技术路线、模型、接口、状态流转或页面交互，必须在 `ANALYSIS` 中显式说明
-- 不得静默以 Dev-Spec 覆盖固定 Spec 或现有代码
+- Canonical Spec 已冻结的契约和 task 边界不得被静默改写；本地漂移影响契约或边界时必须输出 Spec 修订项并等待用户确认
 
 ### Spec vs 现有代码（仅迭代项目）
 - 默认采用保守迭代策略
@@ -611,7 +622,7 @@ INIT 阶段必须在输出背景摘要、进入 `ANALYSIS` 之前，先对记忆
 - `.easy-coding/memory/long/TECHNICAL.md`（按索引或需求命中读取）
 - `.easy-coding/memory/short/*.md`
 - 发现到的 Spec / Prototype 文档 / Prototype HTML / Prototype 图片 / Prototype assets
-- 当前需求已选 Dev-Spec（若有）
+- 当前需求已选 legacy Dev-Spec 全文，或 Canonical Spec 的 `scope_markdown` 消费闭包（若有）
 
 若长期记忆缺少 `memory_schema: 2`、缺少 `BUSINESS.md` / `TECHNICAL.md`，或发现短期记忆缺少 frontmatter / `memory_schema != 2`，必须回到 `INIT` 旧版记忆迁移确认门禁；用户确认后按 `flow/memory-migration.md` 迁移，再继续正式分析。旧版短期迁移是一次性升级动作，不保留旧短期滑动窗口。
 
@@ -629,6 +640,8 @@ INIT 阶段必须在输出背景摘要、进入 `ANALYSIS` 之前，先对记忆
 - 业务子域与影响范围
 - 现状代码结构与关键实现位置
 - Spec 输入是否参与本次分析
+- Canonical Spec 的 `spec_id / source_sha256 / selected_task_ids / repo_ids / scope_sha256`（若有）
+- Canonical task 的依赖缺口、执行 Wave 与 baseline 状态（若有）
 - 是否涉及前端实现
 - 是否存在提示词与 Spec 冲突
 - 是否存在 Spec 与现有代码冲突
@@ -658,6 +671,19 @@ INIT 阶段必须在输出背景摘要、进入 `ANALYSIS` 之前，先对记忆
   - 数据来源
   - 接口对接策略
 - 必须明确说明 mock 数据是否存在；若存在，必须说明其用途、替代条件和退出方式
+
+## 2.4.1 Canonical Spec 快速路径
+
+仅当 `references/dev-spec/canonical-v1.md` 的快速路径条件全部满足时使用。快速路径必须输出：
+
+1. 当前 `spec_id`、所选 `task_id` 与 `repo_id`。
+2. 各仓库 baseline 状态和当前 HEAD。
+3. RULES、ABSTRACT、用户提示词与 Canonical Spec 的冲突。
+4. task Wave、仓库路径映射与依赖状态。
+5. 本轮文件、符号、测试和 integration 门禁。
+6. 原 Spec 的 `source_sha256`、消费闭包的 `scope_sha256` 与进入 `WAITING_CONFIRM` 所需的完整确认信息。
+
+快速路径不得重新选择接口类型、重新命名字段、重新拆 task，或把 Canonical Spec 改写成另一份平行技术方案。条件不满足时继续执行 2.5 的完整方案；`scope-drifted` 必须先读取漂移文件和符号，并列出 Spec 修订项。
 
 ## 2.5 输出技术方案（核心必填 + 条件展开）
 
@@ -768,6 +794,14 @@ INIT 阶段必须在输出背景摘要、进入 `ANALYSIS` 之前，先对记忆
 - Dev-Spec 候选文件：{文件路径列表/无}
 - 已选 Dev-Spec：{文件路径列表/无}
 - 未加载 Dev-Spec：{文件路径列表/无}
+- Dev-Spec 协议：{legacy/canonical-v1/无}
+- Canonical Spec：{spec_id/无}
+- Source SHA-256：{source_sha256/无}
+- 已选任务：{selected_task_ids/无}
+- 仓库范围：{repo_ids 与路径映射/无}
+- 依赖缺口：{dependency_gaps/无}
+- Baseline：{各 repo 状态/无}
+- Scope SHA-256：{scope_sha256/无}
 ```
 
 **命中 Easy Coding With Claude 联合模式时，输出：**
@@ -886,12 +920,16 @@ INIT 阶段必须在输出背景摘要、进入 `ANALYSIS` 之前，先对记忆
 ## 4.2 实施前必须加载
 
 - `.easy-coding/RULES.md`
+- 若当前需求使用 Canonical Spec：重新确认当前 task 的消费闭包、相关契约、`source_sha256` 和 `scope_sha256`
 - 若涉及前端：按需读取 `references/design/apple-design-reference.md`
 
 ## 4.3 实施约束
 
 - 所有代码必须遵守 `RULES.md` 中的强制规范
 - 必须严格按照已确认的“改动范围”实施；不得新增、删除或修改未列入方案的文件，除非先回到 ANALYSIS 输出完整修订方案并重新确认
+- Canonical Spec task 只允许修改其 `repo_id` 下 `change_ids` 声明的 path 与 symbols；新增文件、符号或步骤时必须返回 ANALYSIS 修订范围并重新确认
+- Canonical task 按 Wave、`step_ids` 和 step dependency 执行；每个 step 完成后执行绑定的 `test_ids` 命令
+- hard dependency 未满足时不得进入被阻断 task；integration 未完成不阻断本仓编码，但必须在实施报告中标记待联调，不能宣称全链路完成
 - 必须严格遵守已确认的文件编码字段：修改旧文件保持原编码；新建文件使用项目编码；不得擅自转换文件编码，除非用户明确要求
 - 新建文件若因项目模板、同类文件惯例或用户要求需要作者署名，必须写为 `${Agent Name} with Easy Coding`；`${Agent Name}` 由当前宿主 Agent 替换为自己的名称，例如 `Codex with Easy Coding`
 - 编码时必须补充必要注释，并将其视为交付门禁；重点覆盖非直观业务规则、兼容/兜底逻辑、协议字段映射、异常处理、幂等/并发/缓存、配置 key 含义、风险或易错边界
@@ -920,7 +958,19 @@ INIT 阶段必须在输出背景摘要、进入 `ANALYSIS` 之前，先对记忆
 
 ## 4.5 步骤汇报
 
-每完成一步必须输出：
+Legacy 或普通方案每完成一步使用原有步骤格式。Canonical task 每完成一个 step 必须使用 task/step/change/test ID 汇报：
+
+```markdown
+[阶段：IMPLEMENT]
+
+✅ {task_id} / {step_id} 完成
+- 仓库：{repo_id}
+- 文件与符号：{change_id} / `{symbol}`
+- 验证：{test_id} / `<command>`
+- 依赖状态：{hard/contract/integration 状态}
+```
+
+非 Canonical 任务使用：
 
 ```markdown
 [阶段：IMPLEMENT]
@@ -1204,6 +1254,7 @@ REVIEW 结束后，回到 `IMPLEMENT` 完成报告，统一输出整体实施与
 ## 参考资料
 
 - `references/design/apple-design-reference.md`：前端视觉与交互设计参考
+- `references/dev-spec/canonical-v1.md`：easy-dev-spec Canonical Spec v1 任务级消费协议
 - `references/coding/`：未来语言 / 框架规范扩展目录
 
 **默认原则：**

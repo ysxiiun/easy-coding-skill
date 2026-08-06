@@ -23,6 +23,7 @@
 6. 若已存在可用 Spec / Prototype 输入，必须主动进入分析，不等待用户重新描述需求。
 7. 若交付的是前端工程代码，必须完成真实工程适配与接口对接，不能用原型页或 mock 页面冒充交付结果。
 8. 若当前处于 Easy Coding With Claude 联合模式，读取 `flow/with-claude.md`；Claude 只在 ANALYSIS、初始化资产回补和 REVIEW 中做只读协作，IMPLEMENT 仍由 host agent 独立完成。
+9. 选中 `easy-dev-spec/v1` Canonical Spec 时必须复用 `SKILL.md` 与 `references/dev-spec/canonical-v1.md` 的仓库识别、task 选择、消费闭包和 baseline 门禁，不得整篇读取跨仓正文。
 
 ---
 
@@ -38,6 +39,7 @@
 6. `.easy-coding/prototype/Easy-UI-Prototype.md`
 7. `.easy-coding/prototype/` 下的 HTML 文件、assets 和 images
 8. 扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件（仅扫描文件名，不自动读取正文）
+9. 用户显式引用的具体 Dev-Spec 路径（直接作为候选，不做二次编号选择）
 
 读取规则：
 
@@ -45,6 +47,7 @@
 - 能从代码、配置、Spec、Prototype 推断的信息不要反问用户
 - 若关键信息会影响数据模型、接口、页面结构、核心交互或技术路线，不能脑补，必须停下来确认
 - 若发现 Dev-Spec 候选文件，先按相对路径字典序输出完整编号清单；用户可回复 `1,3`、`1-3`、`全部/all` 或 `不加载/none`。原生选择工具可用时仍必须调用工具承接 `全部加载`、`不加载`、`暂不选择/保持等待` 等真实分支，部分加载和多选通过客户端 free-form Other 输入编号；用户未选择前不读取正文
+- 用户选中后先调用已加载 Easy Coding Skill 根目录下的 `scripts/inspect_dev_spec.py --manifest-only` 探测协议，不得从业务仓库 cwd 猜测脚本路径：legacy 才读取全文；Canonical v1 先选择 task，再运行完整检查并只加载返回的 `scope_markdown`
 
 ## 自动进入分析
 
@@ -62,7 +65,7 @@
 此时的默认行为是：
 
 - 把已发现的 Spec / Prototype 视为本轮主要需求来源
-- 若仅发现 Dev-Spec 候选，先输出完整编号清单并等待用户选择；可选择全部、不加载，或通过编号多选加载部分文件；选定后直接进入分析
+- 若仅发现 Dev-Spec 候选，先输出完整编号清单并等待用户选择；legacy 可继续多选全文加载，Canonical v1 每轮只激活一份并先完成仓库/task 路由
 - 先完成方案分析
 - 只有在 Spec 无法支撑关键实现判断时，才向用户追问缺口
 
@@ -85,13 +88,14 @@
 1. 识别本次任务是否涉及前端开发
 2. 识别本次实际使用了哪些 Spec / Prototype 输入
 3. 若已扫描到 Dev-Spec 候选但未选择，先输出完整编号清单，并优先用原生选择框等待用户选择是否加载；部分加载通过 free-form Other 输入编号
-4. 判断用户提示词与 Spec / Dev-Spec 是否冲突
-5. 若用户没有额外描述需求，默认以 Spec / Prototype / 已选 Dev-Spec 作为需求来源
-6. 若涉及前端：
+4. 若已选择 Dev-Spec，先区分 legacy 与 Canonical v1；Canonical v1 调用检查脚本选择 repo/task，加载消费闭包并记录 `source_sha256` 和 `scope_sha256`
+5. 判断用户提示词与 Spec / Dev-Spec 是否冲突
+6. 若用户没有额外描述需求，默认以 Spec / Prototype / 已选 Dev-Spec 或 Canonical task 作为需求来源
+7. 若涉及前端：
    - 优先启用 `frontend-skill`
    - 按需读取 `references/design/apple-design-reference.md`
    - 明确说明 Prototype HTML 与图片只作参考，不直接用于生产实现
-7. 若处于联合模式：
+8. 若处于联合模式：
    - 调用 With Claude 做只读并行分析，固定使用 `readonly_analysis` / `phase=analysis` / `expected_output_type=analysis`
    - Claude 未返回最终 worker contract 前，用户可见输出仍保持 `[阶段：ANALYSIS]`，不能提前输出正式方案或进入 `WAITING_CONFIRM`
    - 按 `SKILL.md` 主模板输出 `### Claude 协作`
@@ -105,6 +109,11 @@
 **若 Spec 信息不足：**
 - 必须追问，或在方案中显式标注“当前假设”
 - 不得伪装为已确认结论
+
+**若命中 Canonical Spec：**
+- READY、仓库匹配、baseline 可复用且无 hard 缺口时，使用 `SKILL.md` 的 Canonical 快速路径，不重复设计已冻结的契约和 task 边界
+- 漂移时读取实际文件和符号，输出 Spec 修订项；baseline 不可用或仓库不匹配时停止实施
+- 当前仓库上下文不得包含未选仓库 task 的文件、符号、调用链和实施步骤
 
 **若用户未输入额外需求，但 Spec 已足够：**
 - 直接输出首版技术方案
@@ -144,6 +153,7 @@
    - 不得直接复制 Prototype HTML、转贴 Prototype 图片或保留整页 mock 数据作为最终实现
 3. 若用户在实施中变更需求，必须回到 WAITING_CONFIRM
 4. 联合模式下，IMPLEMENT 期间不调用 Claude；第一版实现完成后先进入 REVIEW，再输出实施结果报告
+5. Canonical task 必须按 `task_id / step_id / change_id / test_id` 执行和汇报；越过 path、symbol 或 task 边界时回到 ANALYSIS 重新确认
 
 ### 5. 初始化资产回补
 

@@ -2,13 +2,22 @@
 
 > AI 编程协作技能，让 AI 成为懂业务、记历史、守规范、能理解 Spec 的编程伙伴。
 
-当前版本：`4.3.3`
+当前版本：`5.0.0`
 
 ## 版本号规则
 
 - 第一位：重大功能更新大版本。
 - 第二位：新功能或新优化迭代。
 - 第三位：Bug 修复。
+
+## 5.0.0 更新
+
+- 支持 `easy-dev-spec/v1` Canonical Spec：由文件级全文读取升级为 manifest 路由、仓库识别、task 选择和消费闭包装载。
+- 新增 Skill 内置只读标准库脚本 `scripts/inspect_dev_spec.py`，提供 remote 匹配、依赖闭包、baseline 漂移分类、原 Spec `source_sha256` 和消费闭包 `scope_sha256`；运行时从已加载 Skill 根目录解析脚本，不使用业务仓库的同名路径。
+- READY 且 baseline 可复用的 task 使用 ANALYSIS 快速路径，不重新设计已冻结契约和任务边界。
+- IMPLEMENT 以 `task_id / step_id / change_id / test_id` 作为进度和范围门禁，跨仓任务要求显式 repo path。
+- With Claude 只接收选中任务的消费闭包，并通过 `source_sha256` 与 `scope_sha256` 校验 Host/Claude 上下文一致性。
+- 无 manifest 的历史 Dev-Spec 继续走 legacy 全文流程；未来 schema、仓库不匹配和 baseline 不可用会明确阻断。
 
 ## 4.3.3 更新
 
@@ -171,7 +180,11 @@ Easy-Coding 支持在原有 `.easy-coding` 资产之外，按需读取以下输�
 
 - `spec/dev/` 是运行时候选目录，不属于固定全局 Spec 输入
 - 扫描到候选后，Easy-Coding 会先显式告诉用户“已扫描到 Dev-Spec”
-- 只有用户明确选择后，才会读取该文件并纳入当前需求分析；候选会按编号完整列出，支持 `1,3`、`1-3`、`全部/all` 和 `不加载/none`
+- 用户显式引用具体路径时直接使用该候选；其他候选按编号完整列出，支持 `1,3`、`1-3`、`全部/all` 和 `不加载/none`
+- 选中文件后先以 `--manifest-only` 探测协议：无 manifest 的 legacy 文档才读取全文；`easy-dev-spec/v1` 先识别仓库和 task，只加载选中任务的消费闭包
+- Canonical Spec 每轮只激活一份，支持当前仓全部 READY task、显式 task ID 和显式跨仓 repo path
+- 仓库身份出现多个候选时先展示候选并等待确认，确认后通过显式 repo path 恢复 manifest task catalog 和完整检查；零匹配仍会阻断
+- READY/exact 或 scope-unchanged 场景进入快速分析；scope-drifted 重新检查实际文件，baseline-unavailable 停止实施
 - 已选 Dev-Spec 仅对当前需求生效，不写入长期资产，也不会在后续需求中自动加载
 - 若用户拒绝加载，且当前轮又没有任何可支撑分析的有效提示词或固定 Spec / Prototype，Easy-Coding 会直接提示已准备好并退出当前流程
 
@@ -183,7 +196,7 @@ Easy-Coding 支持在原有 `.easy-coding` 资产之外，按需读取以下输�
 - 触发后会主动做空项目 / 近似空项目检测，不依赖用户口头声明
 - 首次任务跳过前置初始化
 - 若已存在 Spec / Prototype，会直接基于文档进入 ANALYSIS
-- 若仅存在 `spec/dev/` 候选文档，会先输出完整编号清单并等待选择；可选择全部、不加载，或通过编号多选加载部分文件；选定后直接进入 ANALYSIS
+- 若仅存在 `spec/dev/` 候选文档，会先完成候选选择；legacy 选定后全文进入 ANALYSIS，Canonical v1 先完成 repo/task 路由和 baseline 检查
 - 严格按 Spec 推进第一版开发
 - 第一版开发完成并经用户确认后，若首次任务跳过了前置 INIT，自动执行初始化资产回补，再进入记忆阶段
 
@@ -343,10 +356,20 @@ easy-coding/
 ├── references/
 │   ├── design/
 │   │   └── apple-design-reference.md
+│   ├── dev-spec/
+│   │   └── canonical-v1.md
 │   ├── scenarios/
 │   │   └── easy-coding-with-claude.md
 │   └── coding/
 │       └── README.md
+├── scripts/
+│   └── inspect_dev_spec.py
+├── tests/
+│   ├── fixtures/
+│   │   ├── canonical-v1-valid.md
+│   │   ├── easy-dev-spec-v1-final.md
+│   │   └── legacy-dev-spec.md
+│   └── test_inspect_dev_spec.py
 ├── templates/
 │   ├── SOUL.md
 │   ├── RULES.md
@@ -384,6 +407,9 @@ easy-coding/
 - 每次回复必须标注当前阶段
 - 不允许输出 `[阶段：PLAN]`、`[阶段：VERIFY]`、`[阶段：TEST]`、`[阶段：DONE]`、`[阶段：REVIEW_BLOCKED]`；等待 Claude 分析时仍属于 `[阶段：ANALYSIS]`；`REVIEW` 只能在 IMPLEMENT 完成后出现
 - 当前 agent 暴露 `request_user_input` 或等价原生选择工具时，确认执行方案、确认结果和 Dev-Spec 选择必须调用工具；不支持时才文本兜底
+- Canonical Spec 候选选择后必须先运行只读检查脚本；Agent 上下文只能装载 `scope_markdown`，不得整篇读取未选仓库和 task 正文
+- Canonical task 的仓库、文件、符号、step 和 test 范围均为实施硬门；remote 不匹配、baseline 不可用或 hard dependency 未满足时不得进入实现
+- With Claude packet 必须携带与 Host 一致的 `source_sha256` 和 `scope_sha256`，并丢弃 worker 返回的任何越界 task 内容
 - 原生选择框选项必须映射真实下游分支，不得与客户端 free-form Other 重叠；修改意见、反馈意见和补充说明不要手写成按钮
 - 实施结果报告输出后必须等待用户确认结果；Claude review accept、测试通过、host 自检通过都不等于用户确认结果
 - 用户确认实施结果后，必须先生成并验证本轮短期记忆；长期记忆只在短期窗口达到阈值后沉淀窗口外旧短期，短期不足 10 条时不得直接写入 long

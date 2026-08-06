@@ -29,6 +29,15 @@ Claude 运行期间 Easy Coding 用户可见阶段仍为 `[阶段：ANALYSIS]`�
     "selected_dev_specs={当前需求已选 Dev-Spec 列表或无}",
     "conflicts={已识别冲突摘要}"
   ],
+  "canonical_scope": {
+    "spec_id": "{Canonical spec_id；legacy/无则留空}",
+    "source_digest": "{source_sha256；legacy/无则留空}",
+    "selected_task_ids": ["{task_id}"],
+    "repo_ids": ["{repo_id}"],
+    "dependency_summary": ["{直接依赖摘要}"],
+    "scope_digest": "{scope_sha256；legacy/无则留空}",
+    "scope_markdown": "{检查脚本生成的消费闭包；不得替换为整份 Canonical Spec}"
+  },
   "add_read_dirs": [],
   "readonly_policy": {
     "mutation_allowed": false,
@@ -91,7 +100,15 @@ Claude 运行期间 Easy Coding 用户可见阶段仍为 `[阶段：ANALYSIS]`�
     "changed_files": ["{文件路径}"],
     "test_results": ["{验证命令与结果}"],
     "host_self_check": "{编码、注释、范围与风险自检}",
-    "diff_summary": "{diff 摘要，不粘贴大段源码}"
+    "diff_summary": "{diff 摘要，不粘贴大段源码}",
+    "canonical_scope": {
+      "spec_id": "{Canonical spec_id；legacy/无则留空}",
+      "source_digest": "{与 ANALYSIS/IMPLEMENT 一致的 source_sha256}",
+      "selected_task_ids": ["{task_id}"],
+      "change_ids": ["{change_id}"],
+      "test_ids": ["{test_id}"],
+      "scope_digest": "{与 ANALYSIS/IMPLEMENT 一致的 scope_sha256}"
+    }
   },
   "review_scope": {
     "focus": ["scope adherence", "behavior regression", "missing tests"],
