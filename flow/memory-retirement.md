@@ -1,6 +1,6 @@
 # 长期记忆淘汰策略
 
-> 本文件由 `SKILL.md` 在 `MEMORY_LONG` 有窗口外短期记忆需要沉淀时按需加载执行。
+> 本文件由 `SKILL.md` 在 `MEMORY` 冻结出 `candidate_files` 后按需加载执行。
 > 目标是定向清理冲突、重复和过期长期记忆，避免长期记忆膨胀和默认上下文污染。
 
 ---
@@ -9,7 +9,7 @@
 
 满足任一条件时触发：
 
-- `MEMORY_LONG` 中短期记忆数量 `>=10`，且存在窗口外旧短期需要沉淀
+- `MEMORY` 的冻结指令为 `action=distill`，且存在待消费的 `candidate_files`
 - `flow/memory-migration.md` 完成旧版长期/短期迁移后，需要对迁移出的主题做一次冲突整理
 
 不满足长期沉淀条件时，不单独执行淘汰检查。
@@ -20,7 +20,7 @@
 
 淘汰检查只读取命中范围，不做无边界全仓扫描：
 
-- 本轮窗口外短期记忆的 `domain / tags / related_files / target_long`
+- 本轮冻结候选文件的 `domain / tags / related_files / target_long`
 - 本轮要沉淀的业务主题和技术主题
 - `MEMORY.md` 中与本轮主题、关键词、文件来源命中的 `active` 索引
 - `BUSINESS.md` / `TECHNICAL.md` 中对应命中主题的有效记忆区
@@ -72,7 +72,7 @@
 
 ## 输出摘要
 
-`MEMORY_LONG` 输出中必须包含淘汰检查摘要：
+`MEMORY` 输出中必须包含淘汰检查摘要：
 
 ```markdown
 ### 淘汰检查摘要
@@ -87,4 +87,4 @@
 
 ## 返回 SKILL.md
 
-淘汰检查完成后，返回 `SKILL.md` 的 `MEMORY_LONG` 规则，继续写入 `BUSINESS.md` / `TECHNICAL.md` 并更新 `MEMORY.md` 索引。
+淘汰检查完成后，返回 `SKILL.md` 的 `MEMORY` 规则，继续写入 `BUSINESS.md` / `TECHNICAL.md`、更新 `MEMORY.md` 索引并消费冻结候选。

@@ -6,7 +6,7 @@
 
 | 场景 | 输入 | 期望 |
 |---|---|---|
-| 仅 Easy Coding | 用户只显式引用 `$easy-coding` | 进入普通 Easy-Coding 七阶段，不展示联合模式文案，不调用 Claude |
+| 仅 Easy Coding | 用户只显式引用 `$easy-coding` | 进入普通 Easy-Coding 六阶段，不展示联合模式文案，不调用 Claude |
 | 仅 With Claude | 用户只显式引用 `$with-claude` | 不进入 Easy-Coding 阶段流程 |
 | 双显式触发 | 同一轮同时引用 `$easy-coding` 与 `$with-claude` | 展示 `已启动: Easy Coding With Claude 模式`，按需加载 `flow/with-claude.md` |
 | 双触发 + `#no-coding` | 用户消息开头包含 `#no-coding` | 跳过 Easy-Coding 与联合模式全部阶段约束 |
@@ -31,9 +31,9 @@
 | REVIEW replan | Claude verdict 为 replan | 不自动重走方案分析，在实施结果报告中说明 Claude 建议重新规划，等待用户决定 |
 | Claude blocked | Claude worker blocked 或不可用 | 降级为 host-only，并标注 `Claude pass unavailable` 或 `Claude review unavailable` |
 | REVIEW 后等待确认结果 | REVIEW accept / 测试通过 / host 自检通过后输出实施结果报告 | 必须停在 `[阶段：IMPLEMENT]` 等待用户确认；同一轮不得进入记忆 |
-| REVIEW 后确认结果 | 上一轮已输出实施结果报告；用户点选“确认结果”或回复确认词 | 不要求再次显式触发 Easy Coding；迭代项目进入 `[阶段：MEMORY_SHORT]`，初创项目先执行初始化资产回补再进入 `[阶段：MEMORY_SHORT]` |
-| 初创项目确认结果 | 联合模式 REVIEW 已结束，且首次任务跳过前置 INIT | 用户确认后执行 `post_v1_auto_init` 初始化资产回补，再进入 `MEMORY_SHORT → MEMORY_LONG → COMPLETE` |
-| 迭代项目确认结果 | 联合模式 REVIEW 已结束 | 用户确认后直接进入 `MEMORY_SHORT → MEMORY_LONG → COMPLETE` |
+| REVIEW 后确认结果 | 上一轮已输出实施结果报告；用户点选“确认结果”或回复确认词 | 不要求再次显式触发 Easy Coding；迭代项目进入 `[阶段：MEMORY]`，初创项目先执行初始化资产回补再进入 `[阶段：MEMORY]` |
+| 初创项目确认结果 | 联合模式 REVIEW 已结束，且首次任务跳过前置 INIT | 用户确认后执行 `post_v1_auto_init` 初始化资产回补，再进入 `MEMORY → COMPLETE` |
+| 迭代项目确认结果 | 联合模式 REVIEW 已结束 | 用户确认后直接进入 `MEMORY → COMPLETE` |
 | 原生确认可用 | 当前 agent 暴露 `request_user_input` 或等价工具 | 必须调用原生选择工具等待“确认结果”，不能只输出文本提示 |
 | 原生确认选项瘦身 | 等待方案确认或实施结果确认 | 选项必须是真实下游分支；修改意见、反馈意见和补充说明由客户端 free-form Other 承接，不手写成按钮 |
 | 原生确认不可用 | 当前 agent 未暴露原生选择工具 | 使用文本兜底，不得声称已展示原生选择框 |

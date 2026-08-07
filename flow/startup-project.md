@@ -173,13 +173,13 @@
 5. 回补长期记忆三文件只代表初始化资产可用，不代表本轮任务已沉淀长期记忆
 6. 联合模式下，回补过程按 `flow/with-claude.md` 的 INIT 协作规则执行：Claude 只读草拟，host agent 合并和写入
 
-### 6. MEMORY_SHORT → MEMORY_LONG → COMPLETE
+### 6. MEMORY → COMPLETE
 
 初始化资产回补完成后：
 
-1. 进入 `MEMORY_SHORT`
+1. 进入 `MEMORY`
 2. 必须先新增本轮 schema 2 短期记忆并验证文件已落盘
-3. 再进入 `MEMORY_LONG` 做长期沉淀检查
+3. 在同一阶段冻结并执行长期记忆 `no-op / distill` 指令，完成候选消费与保留集合校验
 4. 最后输出 `COMPLETE`
 
 ---

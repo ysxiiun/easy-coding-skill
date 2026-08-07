@@ -1,6 +1,6 @@
 ---
 memory_schema: 2
-id: SM-YYYYMMDD-001
+id: {memory_id}
 date: YYYY-MM-DD
 task_type: feature | bugfix | refactor | perf | frontend | doc | workflow
 project_mode: startup | iteration
@@ -19,10 +19,12 @@ target_long: BUSINESS | TECHNICAL | BOTH | NONE
 # 短期记忆模板
 
 > 本模板用于 `.easy-coding/memory/short/` 下的单次任务记忆。
-> 文件名规则：`{序号}_{日期}_{智能命名}.md`
+> 文件名规则：`{memory_id}_{YYYYMMDD}_{smart_name}.md`
+> `memory_id` 使用 `SM-<UUIDv7>`，并与本文件 frontmatter `id` 完全一致；新记忆不得扫描目录计算数字序号。
 > 单条短期记忆创建后不修改；短期记忆是“近期细节滑动窗口 + 待沉淀缓冲区”。
-> 当短期记忆达到 10 条时，最新 5 条保留为近期上下文，不参与本轮沉淀；窗口外旧短期按候选区进入长期记忆或被审计为不沉淀。
-> 滑动窗口排序优先按 frontmatter `date` 升序；缺少 date、date 无法可靠解析或 date 相同时，降级按文件名前缀序号，再按文件名。
+> 默认窗口为 max 10 / keep 5；只有短期记忆超过 max 时才归档，因此第 11 条写入后最旧 6 条成为候选，最新 5 条保留。
+> 排序依次使用 frontmatter `date`、ID 类型、`id`、文件名；同日旧 `SM-YYYYMMDD-NNN` ID 排在 UUIDv7 ID 前。
+> 旧数字文件名和 `SM-YYYYMMDD-NNN` ID 保持兼容读取，不做破坏性重命名。
 
 ## 任务摘要
 

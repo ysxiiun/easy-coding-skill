@@ -201,4 +201,4 @@
 初始化完成后，AI 返回 `SKILL.md` 继续执行：
 
 - 常规初始化：回到 INIT 背景摘要，再进入 ANALYSIS
-- 初创项目初始化资产回补：直接进入 MEMORY_SHORT
+- 初创项目初始化资产回补：直接进入 MEMORY

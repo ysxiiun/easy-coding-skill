@@ -203,7 +203,7 @@ Easy-Coding 支持在原有 `.easy-coding` 资产之外，按需读取以下输�
 #### 迭代项目
 
 - 已存在明确业务代码、页面、接口、服务或领域模型
-- 保持原有七阶段主流程
+- 保持六阶段主流程
 - ANALYSIS 阶段会参考 Spec，但默认以现有代码现状为主，且必须先阅读相关代码后再给出实施级方案
 - 若 Spec 与现有代码冲突，默认采用保守迭代策略
 
@@ -212,10 +212,11 @@ Easy-Coding 支持在原有 `.easy-coding` 资产之外，按需读取以下输�
 **短期记忆：任务级追溯**
 
 ```text
-格式：001_20260324_新增用户登录功能.md
+格式：SM-019f1234-5678-7abc-8def-0123456789ab_20260324_新增用户登录功能.md
 内容：frontmatter 元数据、任务摘要、执行证据、业务记忆候选、技术记忆候选、不沉淀内容、关联记忆
 ```
 
+- 新短期记忆使用 `SM-<UUIDv7>` 作为 frontmatter `id` 和文件名前缀，不再扫描目录计算数字序号；旧数字文件名和 `SM-YYYYMMDD-NNN` ID 保持兼容读取
 - 单条短期记忆创建后不修改，作为待沉淀任务记录保留
 - 实施结果经用户确认后，必须先新增本轮短期记忆并验证文件已落盘；不得用直接更新长期记忆替代短期记忆
 - frontmatter 必须包含 `memory_schema: 2`、任务类型、业务域、标签、关键文件、提交、验证状态、沉淀目标
@@ -224,14 +225,15 @@ Easy-Coding 支持在原有 `.easy-coding` 资产之外，按需读取以下输�
 
 **长期记忆：三文件知识资产**
 
-- 本轮短期记忆成功落盘后，才允许进入长期沉淀检查
-- 当短期记忆 <10 条时，不沉淀、不删除、不写入 `memory/long/*`，直接进入完成阶段
-- 当短期记忆 ≥10 条时自动沉淀窗口外旧短期：按 `date → 文件名前缀序号 → 文件名` 排序，保留最新 5 条
+- 短期记忆生成与长期沉淀检查统一在 `MEMORY` 阶段完成；本轮短期记忆成功落盘后，才允许计算归档指令
+- 默认 `short_term_max=10`、`short_term_keep=5`；仅当短期记忆数量严格大于 max 时 `distill`，因此 10 条为 `no-op`，第 11 条写入后归档最旧 6 条并保留最新 5 条
+- 项目已有 `.easy-coding/config.yaml` 时读取 `memory.short_term_max/short_term_keep`；`keep > max` 会阻断归档，避免产生无法收敛的窗口
+- 排序使用 `date → ID 类型 → id → 文件名`；同日旧 `SM-YYYYMMDD-NNN` ID 排在 UUIDv7 ID 前
 - `MEMORY.md` 只做索引与读取导航
 - `BUSINESS.md` 保存业务概念、字段语义、业务流程、业务规则、上下游契约、业务排障经验
 - `TECHNICAL.md` 保存架构决策、接口决策、工程规则、实现模式、易错点、验证/发布经验
 - 长期沉淀时按需加载 `flow/memory-retirement.md`，对本轮命中主题执行定向淘汰检查；已淘汰记录默认不进入分析上下文
-- 长期沉淀成功后删除窗口外旧短期，短期目录保留最新 5 条近期细节上下文
+- 长期沉淀时冻结候选与保留集合；成功后消费全部候选并验证候选已删除、保留文件仍存在
 - INIT 阶段发现旧版记忆时先提示用户确认；确认后按 `flow/memory-migration.md` 渐进迁移：旧长期拆分为三文件，旧短期一次性沉淀并删除，迁移完成后自动进入分析，后续新短期按滑动窗口运行
 - 让 AI 在后续任务中持续复用历史知识
 
@@ -270,7 +272,7 @@ Easy-Coding 支持在原有 `.easy-coding` 资产之外，按需读取以下输�
 
 阶段边界：
 
-- Easy Coding 合法阶段只有 `INIT / ANALYSIS / WAITING_CONFIRM / IMPLEMENT / REVIEW / MEMORY_SHORT / MEMORY_LONG / COMPLETE`。
+- Easy Coding 合法阶段只有 `INIT / ANALYSIS / WAITING_CONFIRM / IMPLEMENT / REVIEW / MEMORY / COMPLETE`。
 - `PLAN` 不是 Easy Coding 阶段；任何用户可见输出都不得写 `[阶段：PLAN]`。
 - `VERIFY` / `TEST` / `DONE` / `REVIEW_BLOCKED` 也不是 Easy Coding 阶段；验证、自检和测试仍属于 `IMPLEMENT`，完成只能使用 `COMPLETE`。
 - With Claude 的 `workflow_type` / `phase` 只是 worker task packet 字段，不等于 Easy Coding 阶段。
@@ -280,23 +282,23 @@ Easy-Coding 支持在原有 `.easy-coding` 资产之外，按需读取以下输�
 
 ## 工作流程
 
-### 统一七阶段
+### 统一六阶段
 
 ```text
-INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → MEMORY_SHORT → MEMORY_LONG → COMPLETE
+INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → MEMORY → COMPLETE
 ```
 
 联合模式会在 `IMPLEMENT` 后增加一个只读 Review 插槽：
 
 ```text
-INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → REVIEW → 实施结果报告 → 用户确认结果 → 按项目模式进入初始化资产回补或 MEMORY_SHORT → MEMORY_LONG → COMPLETE
+INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → REVIEW → 实施结果报告 → 用户确认结果 → 按项目模式进入初始化资产回补或 MEMORY → COMPLETE
 ```
 
 ### 初创项目流程
 
 ```text
 模式判定 → 空项目检测 → 发现 Spec / Prototype → 跳过前置 INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT
-→ 用户确认第一版结果 → 初始化资产回补 → MEMORY_SHORT → MEMORY_LONG → COMPLETE
+→ 用户确认第一版结果 → 初始化资产回补 → MEMORY → COMPLETE
 ```
 
 实施结果报告后的“确认结果”属于已激活流程续流，不要求用户再次显式引用 `$easy-coding`；但必须先等待用户确认结果，不能在输出实施结果报告的同一轮生成记忆。
@@ -309,7 +311,7 @@ INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → REVIEW → 实施结果�
 ### 迭代项目流程
 
 ```text
-模式判定 → INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → MEMORY_SHORT → MEMORY_LONG → COMPLETE
+模式判定 → INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → MEMORY → COMPLETE
 ```
 
 ---
@@ -412,7 +414,7 @@ easy-coding/
 - With Claude packet 必须携带与 Host 一致的 `source_sha256` 和 `scope_sha256`，并丢弃 worker 返回的任何越界 task 内容
 - 原生选择框选项必须映射真实下游分支，不得与客户端 free-form Other 重叠；修改意见、反馈意见和补充说明不要手写成按钮
 - 实施结果报告输出后必须等待用户确认结果；Claude review accept、测试通过、host 自检通过都不等于用户确认结果
-- 用户确认实施结果后，必须先生成并验证本轮短期记忆；长期记忆只在短期窗口达到阈值后沉淀窗口外旧短期，短期不足 10 条时不得直接写入 long
+- 用户确认实施结果后，必须进入单一 `MEMORY` 阶段先生成并验证本轮 UUIDv7 短期记忆；长期记忆仅在短期数量严格大于 max 时处理冻结候选，`no-op` 时不得写入 long 或删除短期记忆
 - ANALYSIS 方案必须按“核心必填 + 条件展开”输出；无关条件章节不要硬填
 - ANALYSIS 方案必须包含“改动范围”表，逐文件说明改动文件、改动类型、文件编码和改动核心内容
 - ANALYSIS 方案必须包含“待用户决策”和“验证与验收”，冲突存在时先等待用户拍板

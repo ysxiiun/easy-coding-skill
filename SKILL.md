@@ -21,12 +21,12 @@ metadata:
 - 上一轮停在 `WAITING_CONFIRM`，用户回复“确认 / ok / 开始 / 没问题”或点选“确认执行方案” → 进入 `IMPLEMENT`
 - 上一轮停在 `INIT` 的旧版记忆迁移确认，用户回复“确认 / ok / 开始 / 没问题”或点选“确认迁移” → 执行 `flow/memory-migration.md`，迁移完成后自动进入 `ANALYSIS`
 - 上一轮已输出实施结果报告并等待确认，用户回复“确认 / ok / 没问题 / 确认结果”或点选“确认结果” → 进入实施后续流转
-- 上一轮已经开始 `MEMORY_SHORT` / `MEMORY_LONG` / 初创项目初始化资产回补，但尚未输出 `COMPLETE` → 继续直到 `COMPLETE`
+- 上一轮已经开始 `MEMORY` / 初创项目初始化资产回补，但尚未输出 `COMPLETE` → 继续直到 `COMPLETE`
 
 实施后续流转必须按项目模式执行：
 
-- 初创项目：仅当首次任务为先交付第一版而跳过了前置 INIT 时，执行初始化资产回补 → `MEMORY_SHORT` → `MEMORY_LONG` → `COMPLETE`
-- 迭代项目：直接执行 `MEMORY_SHORT` → `MEMORY_LONG` → `COMPLETE`
+- 初创项目：仅当首次任务为先交付第一版而跳过了前置 INIT 时，执行初始化资产回补 → `MEMORY` → `COMPLETE`
+- 迭代项目：直接执行 `MEMORY` → `COMPLETE`
 
 若用户在续流确认中提出新的修改意见，必须停止后续流转，回到对应方案或变更确认流程。
 
@@ -34,7 +34,7 @@ metadata:
 
 Easy Coding 用户可见阶段标签只能从以下集合中选择：
 
-`INIT / ANALYSIS / WAITING_CONFIRM / IMPLEMENT / REVIEW / MEMORY_SHORT / MEMORY_LONG / COMPLETE`
+`INIT / ANALYSIS / WAITING_CONFIRM / IMPLEMENT / REVIEW / MEMORY / COMPLETE`
 
 强制规则：
 
@@ -78,7 +78,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 - 若用户消息在开头写入 `#no-coding`，则当前轮立即退出 easy-coding 模式
 - 当前轮完全跳过 easy-coding 的全部约束与流程，包括但不限于：
   - 阶段标注 `[阶段：XXXX]`
-  - INIT / ANALYSIS / WAITING_CONFIRM / IMPLEMENT / REVIEW / MEMORY_* / COMPLETE
+  - INIT / ANALYSIS / WAITING_CONFIRM / IMPLEMENT / REVIEW / MEMORY / COMPLETE
   - 方案确认阻断
   - 记忆写入与流程重置规则
   - 项目模式判定与 Spec 读取规则
@@ -159,7 +159,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
   - INIT / interactive_init：仅允许用户明确确认初始化后，按 flow/init.md 写入 .easy-coding/ 初始化资产
   - INIT / post_v1_auto_init：仅允许初创项目第一版实现结果已由用户确认，且首次任务为先交付第一版而跳过前置 INIT 后，按 flow/init.md 自动回补 .easy-coding/ 初始化资产
   - INIT / legacy_memory_migration：仅当发现旧版记忆文件时，按 flow/memory-migration.md 渐进迁移 .easy-coding/memory/；不得改写业务代码、Spec 或 Prototype
-  - MEMORY_SHORT / MEMORY_LONG：仅允许实施结果已由用户确认后，按记忆流程写入；必须先生成本轮短期记忆，再检查长期沉淀条件
+  - MEMORY：仅允许实施结果已由用户确认后，按记忆流程写入；必须在同一阶段内先生成并验证本轮短期记忆，再执行长期沉淀检查
   - 其他情况 → 禁止写入，输出阻断提示等待确认
 □ 用户是否已明确确认对应操作？
   - 技术实现：用户已确认技术方案
@@ -229,11 +229,11 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 │                                      ↓                      │
 │  实施结果报告 → 等待用户确认结果 → 项目模式后续流转          │
 │                                      ↓                      │
-│  ⑤ MEMORY_SHORT → ⑥ MEMORY_LONG → ⑦ COMPLETE              │
+│            ⑤ MEMORY → ⑥ COMPLETE                           │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-> `REVIEW` 仅在 Easy Coding With Claude 联合模式中启用；普通 Easy-Coding 流程仍保持七阶段。
+> `REVIEW` 仅在 Easy Coding With Claude 联合模式中启用；普通 Easy-Coding 流程保持六阶段。
 
 | 阶段 | 名称 | 进入条件 | 离开条件 | 关键约束 |
 |:---:|------|---------|---------|---------|
@@ -242,9 +242,8 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 | ③ | WAITING_CONFIRM | 方案已输出 | 用户说"确认/ok/开始" | 用户未确认禁止进入下一阶段 |
 | ④ | IMPLEMENT | 用户已确认方案 | 所有步骤完成 | 每步完成后必须汇报 |
 | ④.5 | REVIEW | 仅联合模式；IMPLEMENT 完成且已有变更清单、验证结果、host 自检结论后自动进入 | Claude review 通过 / 3 轮结束 / Claude 不可用降级 | Claude 只读，修复仅由 host agent 执行 |
-| ⑤ | MEMORY_SHORT | 实施结果报告后收到用户确认，且必要的初始化资产回补已完成 | 记忆文件生成 | 确认后自动触发；同一轮实施报告不得直接进入 |
-| ⑥ | MEMORY_LONG | 短期记忆生成完成 | 沉淀检查完成 | 条件满足时自动沉淀 |
-| ⑦ | COMPLETE | 记忆处理完成 | 流程结束 | 输出完成报告 |
+| ⑤ | MEMORY | 实施结果报告后收到用户确认，且必要的初始化资产回补已完成 | 短期记忆与条件性长期沉淀全部处理完成 | 确认后自动触发；先写短期检查点，再按冻结候选执行 `no-op` 或 `distill` |
+| ⑥ | COMPLETE | 记忆处理完成 | 流程结束 | 输出完成报告 |
 
 ## 阶段命名硬约束
 
@@ -270,7 +269,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 □ 我是否即将违反“禁止跳步”规则？
 □ 我即将使用的是只读上下文采集还是写入 / 修改类操作？
 □ 如果是写入 / 修改类操作，当前阶段与用户确认状态是否允许？
-□ 本次回复是否已包含合法阶段标注？阶段是否属于 INIT / ANALYSIS / WAITING_CONFIRM / IMPLEMENT / REVIEW / MEMORY_SHORT / MEMORY_LONG / COMPLETE？
+□ 本次回复是否已包含合法阶段标注？阶段是否属于 INIT / ANALYSIS / WAITING_CONFIRM / IMPLEMENT / REVIEW / MEMORY / COMPLETE？
 ```
 
 **若任一检查不通过 → 停止生成 → 输出阻断提示 → 等待用户确认**
@@ -1007,7 +1006,7 @@ Legacy 或普通方案每完成一步使用原有步骤格式。Canonical task �
 1. 自动读取 `flow/init.md`
 2. 按 `post_v1_auto_init` 语义回补 `.easy-coding/` 初始化资产
 3. 不覆盖已有 Spec、Prototype 和已确认代码成果
-4. 回补完成后再进入 MEMORY_SHORT
+4. 回补完成后再进入 MEMORY
 
 ## 4.8 实施完成后的自动流转
 
@@ -1016,9 +1015,9 @@ IMPLEMENT 完成后，必须按模式执行：
 - Easy Coding With Claude 联合模式
   - REVIEW → 实施结果报告 → 等待用户确认实施结果 → 用户确认后按项目模式进入实施后续流转
 - 非联合模式 `初创项目`
-  - 实施结果报告 → 等待用户确认实施结果 → 用户确认后初始化资产回补 → MEMORY_SHORT → MEMORY_LONG → COMPLETE
+  - 实施结果报告 → 等待用户确认实施结果 → 用户确认后初始化资产回补 → MEMORY → COMPLETE
 - 非联合模式 `迭代项目`
-  - 实施结果报告 → 等待用户确认实施结果 → 用户确认后 MEMORY_SHORT → MEMORY_LONG → COMPLETE
+  - 实施结果报告 → 等待用户确认实施结果 → 用户确认后 MEMORY → COMPLETE
 
 实施结果报告输出后，必须停止：
 
@@ -1031,10 +1030,10 @@ Claude review 的 `accept`、host 自检通过、测试通过、构建通过都�
 用户确认实施结果后，联合模式仍按项目模式进入后续流程，不能停留在 REVIEW：
 
 - `初创项目`
-  - 若首次任务跳过了前置 INIT：初始化资产回补 → MEMORY_SHORT → MEMORY_LONG → COMPLETE
-  - 若已完成前置 INIT 或无需回补：MEMORY_SHORT → MEMORY_LONG → COMPLETE
+  - 若首次任务跳过了前置 INIT：初始化资产回补 → MEMORY → COMPLETE
+  - 若已完成前置 INIT 或无需回补：MEMORY → COMPLETE
 - `迭代项目`
-  - MEMORY_SHORT → MEMORY_LONG → COMPLETE
+  - MEMORY → COMPLETE
 
 若 REVIEW 3 轮未收敛但用户明确确认当前实施结果，视为用户接受报告中的剩余风险，仍按上面的实施后续流转进入记忆；若用户要求继续调整或重新规划，则按其指令回到对应阶段。
 
@@ -1065,8 +1064,8 @@ EASY-CODING 已完成代码编写，请您检查代码变动，如有不妥，�
 
 ⚠️ 确认后将自动执行：
 - 联合模式：Claude Review 结论已纳入本报告；确认后按项目模式继续实施后续流转，不停留在 REVIEW
-- 初创项目：如本轮跳过了前置 INIT，则初始化资产回补 → 短期记忆生成 → 长期记忆沉淀检查
-- 迭代项目：短期记忆生成 → 长期记忆沉淀检查
+- 初创项目：如本轮跳过了前置 INIT，则初始化资产回补 → MEMORY（短期记忆生成与长期沉淀检查）
+- 迭代项目：进入 MEMORY（短期记忆生成与长期沉淀检查）
 ⚠️ 在用户确认结果前，禁止生成短期记忆。
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
@@ -1151,63 +1150,71 @@ REVIEW 结束后，回到 `IMPLEMENT` 完成报告，统一输出整体实施与
 
 ---
 
-# 【阶段 5】MEMORY_SHORT - 短期记忆生成
+# 【阶段 5】MEMORY - 记忆归档
 
-> 仅在实施结果报告之后收到用户确认时进入；同一轮输出实施结果报告时不得进入本阶段。进入后自动生成短期记忆，无需二次确认。
+> 仅在实施结果报告之后收到用户确认时进入；同一轮输出实施结果报告时不得进入本阶段。进入后在同一阶段内先生成短期记忆检查点，再执行长期记忆 `no-op / distill`，无需二次确认。
 
-- 进入本阶段必须先确保 `.easy-coding/memory/short/` 存在；若目录缺失，按当前项目编码创建目录，不得因此跳过短期记忆。
-- 每次用户确认实施结果后，必须为本轮任务新增 1 条 schema 2 短期记忆；短期记忆是本轮任务的落盘凭证，不得用直接更新长期记忆替代。
-- 文件名规则：`{序号}_{日期}_{智能命名}.md`
-  - 序号取当前 `.easy-coding/memory/short/` 下已有短期文件最大数字前缀 + 1；无短期文件时从 `001` 开始。
-  - 日期使用当前自然日 `YYYYMMDD`；智能命名使用可读短横线或中文短语，避免空格和特殊符号。
-- 内容模板：读取并遵循 `templates/SHORT_MEMORY.md`
-- 必须写入 `memory_schema: 2` frontmatter，包含 `id / date / task_type / project_mode / domain / tags / related_files / commit / verification / memory_value / target_long`
-- 正文必须记录任务摘要、执行证据、业务记忆候选、技术记忆候选、不沉淀内容、关联记忆
-- `target_long=BUSINESS / TECHNICAL / BOTH / NONE` 只作为未来进入滑动窗口外时的沉淀建议，后续沉淀仍需结合正文和当前代码复核
-- 写入后必须重新读取或确认该短期文件存在，且 frontmatter 含 `memory_schema: 2`；验证失败时停留在 `MEMORY_SHORT` 并修复短期文件，不得进入 `MEMORY_LONG`。
+## 5.1 生成短期记忆检查点
 
-输出：
+- 先确保 `.easy-coding/memory/short/` 存在；目录缺失时按当前项目编码创建，不得因此跳过记忆归档。
+- 每次用户确认实施结果后，必须为本轮任务新增 1 条 schema 2 短期记忆；不得用直接更新长期记忆替代。
+- 先为本轮记忆生成一次 `memory_id`，格式固定为 `SM-<UUIDv7>`：
+  - UUIDv7 使用当前 Unix 毫秒时间戳的低 48 位、版本位 `7`、RFC variant `10` 和 74 位安全随机数。
+  - 必须使用宿主环境可用的安全随机能力；同一条记忆只生成一次，发生文件名碰撞时重新生成完整 UUIDv7。
+  - 不得扫描短期目录计算 `001 / 002` 数字序号。
+- 文件名固定为 `{memory_id}_{YYYYMMDD}_{smart_name}.md`：
+  - `memory_id` 必须与 frontmatter `id` 完全一致，使用小写规范 UUID 文本。
+  - 日期使用当前自然日 `YYYYMMDD`；`smart_name` 使用可读短横线或中文短语，避免空格和特殊符号。
+- 内容必须读取并遵循 `templates/SHORT_MEMORY.md`，frontmatter 包含 `memory_schema / id / date / task_type / project_mode / domain / tags / related_files / commit / verification / memory_value / target_long`。
+- 正文记录任务摘要、执行证据、业务记忆候选、技术记忆候选、不沉淀内容和关联记忆；`target_long` 只是候选建议，沉淀时仍须结合正文和当前代码复核。
+- 写入后重新读取并验证：文件存在、`memory_schema: 2`、`id` 为 `SM-<UUIDv7>`、文件名前缀与 `id` 完全一致。验证失败时保持 `[阶段：MEMORY]` 并修复，不得计算归档指令。
 
-```markdown
-[阶段：MEMORY_SHORT]
+旧 `{NNN}_{YYYYMMDD}_{smart_name}.md` 文件和 frontmatter `id=SM-YYYYMMDD-NNN` 继续兼容读取，不做破坏性重命名；只有本轮新检查点强制使用 UUIDv7。
 
-✅ 短期记忆已生成：{文件名}
+## 5.2 冻结长期记忆指令
 
-即将自动执行：长期记忆沉淀检查（若短期记忆 ≥10 条则自动沉淀）
-```
+- 默认窗口配置为 `short_term_max=10`、`short_term_keep=5`。
+- 若 `.easy-coding/config.yaml` 存在 `memory.short_term_max` / `memory.short_term_keep`，使用其中的非负整数覆盖默认值；无法解析的值忽略并使用默认值。
+- 若 `short_term_keep > short_term_max`，报告非法配置并保持 `[阶段：MEMORY]`；不得沉淀、删除短期记忆或进入 `COMPLETE`。
+- 只把 `memory_schema: 2` 的 Markdown 文件计入正常窗口；旧版无 schema 文件必须先按 `flow/memory-migration.md` 迁移。
+- 对全部有效短期记忆稳定排序：
+  1. frontmatter `date` 升序；
+  2. 同日先排旧 `SM-YYYYMMDD-NNN` ID，再排 `SM-<UUIDv7>` ID，其他 ID 最后；
+  3. 同类按 frontmatter `id` 升序；
+  4. 仍相同时按文件名升序。
+- 计算并在本次 MEMORY 处理中冻结以下指令；后续不得因文件变化重新分配候选：
+  - `short_count`：有效短期记忆总数；
+  - `action`：仅当 `short_count > short_term_max` 时为 `distill`，否则为 `no-op`；
+  - `trim_count`：`distill` 时为 `short_count - short_term_keep`，否则为 `0`；
+  - `candidate_files`：排序后最旧的 `trim_count` 个文件；
+  - `kept_files`：其余保留文件；
+  - `checkpoint_disposition`：本轮短期检查点属于 `candidate` 或 `kept`；若两者都未命中，说明冻结集合异常，必须保持 `[阶段：MEMORY]`。
+- 默认配置下，10 条短期记忆必须 `no-op`；写入第 11 条后必须冻结最旧 6 条为候选、保留最新 5 条。
 
----
+## 5.3 执行 `no-op / distill`
 
-# 【阶段 6】MEMORY_LONG - 长期记忆沉淀检查
+- `action=no-op`：不得修改 `.easy-coding/memory/long/MEMORY.md` / `BUSINESS.md` / `TECHNICAL.md`，不得删除任何短期记忆。
+- `action=distill`：
+  1. 只读取冻结的 `candidate_files`，不得沉淀或删除 `kept_files`。
+  2. 按 frontmatter 和正文分拣：业务事实进入 `BUSINESS.md`，工程事实进入 `TECHNICAL.md`，普通流水、临时日志、一次性数据和无复用价值细节记为不沉淀。
+  3. 写入长期记忆前加载并执行 `flow/memory-retirement.md`，只对候选命中的主题做定向 `delete / merge / deprecate` 检查。
+  4. 更新 `MEMORY.md` 索引；一致内容合并来源，冲突内容以当前代码和用户最新确认为准，旧内容进入已淘汰记录。
+  5. 长期三文件更新和不沉淀审计完成后，删除全部 `candidate_files`，包括没有进入长期记忆的候选；短期候选被消费后不得继续留在窗口中。
 
-> 仅在本轮 schema 2 短期记忆已成功落盘并验证后进入；短期记忆生成完成后自动检查。短期记忆 ≥10 条时自动沉淀，无需再次确认。短期记忆采用滑动窗口：最新 5 条保留为近期细节上下文，不参与本轮沉淀。
+## 5.4 完成校验与输出
 
-- 进入本阶段前必须有“本轮短期记忆文件名”作为凭证；若没有本轮短期文件，必须回到 `MEMORY_SHORT` 生成，不得直接写入 `.easy-coding/memory/long/*`。
-- 读取当前全部短期记忆并排序：
-  - 优先按 frontmatter `date` 升序
-  - 缺少 `date`、`date` 无法可靠解析或 `date` 相同时，降级按文件名前缀序号升序
-  - 仍无法区分时，按文件名升序稳定排序
-- 若短期记忆 <10 条：不沉淀、不删除、不得写入 `.easy-coding/memory/long/MEMORY.md` / `BUSINESS.md` / `TECHNICAL.md`，直接进入 COMPLETE
-- 若短期记忆 ≥10 条：保留排序后的最新 5 条；只沉淀窗口外旧短期记忆；若不存在窗口外旧短期，则不沉淀、不删除
-- 对窗口外旧短期按 frontmatter 和正文分拣：
-  - 业务概念、字段语义、业务流程、业务规则、上下游契约、业务排障经验 → `.easy-coding/memory/long/BUSINESS.md`
-  - 架构决策、接口决策、工程规则、实现模式、易错点、验证/发布经验 → `.easy-coding/memory/long/TECHNICAL.md`
-  - 普通任务流水、临时日志、一次性数据、无复用价值细节 → 不沉淀
-- 写入长期记忆前，必须加载并执行 `flow/memory-retirement.md`：
-  - 只围绕本轮窗口外短期命中的主题、`domain / tags / related_files / target_long`、`MEMORY.md` active 索引和对应长期有效区做定向淘汰检查
-  - 不做无边界全仓扫描，不默认读取“已淘汰记录”
-  - 对重复、冲突、过期内容按 `delete / merge / deprecate` 处理
-- 更新 `.easy-coding/memory/long/MEMORY.md` 索引，只保留主题、类型、关键词、详情文件、状态、最近更新和来源
-- 已存在一致内容时合并来源，不重复膨胀；已存在冲突内容时，优先当前代码和用户最新确认，旧内容进入已淘汰记录
-- 长期记忆更新成功后，仅删除本次已处理的窗口外旧短期记忆；最新 5 条继续保留在 `.easy-coding/memory/short/`
+- `no-op` 完成前，确认本轮短期检查点仍存在且内容未被修改。
+- `distill` 完成前，逐项确认所有 `candidate_files` 已不存在、所有 `kept_files` 仍存在；本轮检查点只有在 `checkpoint_disposition=candidate` 时才允许被消费。任一候选未消费或保留文件缺失时保持 `[阶段：MEMORY]` 并修复。
+- 只有短期检查点与长期指令均处理完成后，才能进入 `COMPLETE`。
 
 输出两种分支：
-- 有沉淀：输出当前短期总数、本轮沉淀数量、保留文件清单、业务主题、技术主题、未沉淀原因、淘汰检查摘要（删除条目、合并条目、淘汰条目、跳过原因）、删除文件清单，并进入 COMPLETE
-- 无沉淀：说明本轮短期记忆文件、当前短期总数、未写入长期记忆的原因（短期记忆不足 10 条或无窗口外旧短期），并进入 COMPLETE
+
+- `distill`：输出本轮短期文件、窗口配置、归档前总数、候选与保留文件、业务/技术主题、不沉淀原因、淘汰检查摘要、候选消费校验，然后进入 `COMPLETE`。
+- `no-op`：输出本轮短期文件、窗口配置、当前总数和未写入长期记忆的原因，然后进入 `COMPLETE`。
 
 ---
 
-# 【阶段 7】COMPLETE - 完成
+# 【阶段 6】COMPLETE - 完成
 
 ```markdown
 [阶段：COMPLETE]

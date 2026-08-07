@@ -1,8 +1,8 @@
 interface:
   display_name: "Easy Coding"
-  short_description: "仅显式调用的七阶段人机共创编程助手，支持 Spec 驱动、项目记忆、保守迭代和 With Claude 联合模式"
+  short_description: "仅显式调用的六阶段人机共创编程助手，支持 Spec 驱动、项目记忆、保守迭代和 With Claude 联合模式"
   default_prompt: >-
-    使用 `$easy-coding` 按七阶段流程处理编程需求；Dev-Spec 候选在用户选择前只扫描文件名，无 manifest 时走 legacy 全文分析，`easy-dev-spec/v1` 则先运行只读检查脚本完成仓库与 task 选择、baseline 校验和消费闭包装载，并以 task/step/change/test ID 约束实施；保留显式确认、记忆门禁、`#no-coding` 和 With Claude 只读 REVIEW 规则。
+    使用 `$easy-coding` 按六阶段流程处理编程需求；Dev-Spec 候选在用户选择前只扫描文件名，无 manifest 时走 legacy 全文分析，`easy-dev-spec/v1` 则先运行只读检查脚本完成仓库与 task 选择、baseline 校验和消费闭包装载，并以 task/step/change/test ID 约束实施；实施结果确认后在单一 MEMORY 阶段完成 UUIDv7 短期记忆与条件性长期归档，同时保留 `#no-coding` 和 With Claude 只读 REVIEW 规则。
 
 policy:
   allow_implicit_invocation: false

@@ -25,7 +25,7 @@
 
 ## 总原则
 
-1. Easy Coding 仍是主流程，继续遵守 INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → REVIEW → 实施结果报告 → 用户确认结果 → 按项目模式进入初始化资产回补或 MEMORY_SHORT → MEMORY_LONG → COMPLETE。
+1. Easy Coding 仍是主流程，继续遵守 INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → REVIEW → 实施结果报告 → 用户确认结果 → 按项目模式进入初始化资产回补或 MEMORY → COMPLETE。
 2. With Claude 只提供只读参谋能力，不接管 Easy Coding 阶段控制。
 3. Claude 只在 INIT、ANALYSIS、REVIEW 介入；IMPLEMENT 期间不调用 Claude。
 4. 所有写入、修复、初始化资产落地、记忆写入都只能由 host agent 执行。
@@ -259,7 +259,7 @@ Claude review 的 `accept`、host 自检通过、测试通过、构建通过都�
 
 用户确认实施结果后，再按项目模式进入后续流程：
 
-- 初创项目：仅当首次任务跳过了前置 INIT 时，执行 `post_v1_auto_init` 初始化资产回补，然后进入 `MEMORY_SHORT → MEMORY_LONG → COMPLETE`
-- 迭代项目：直接进入 `MEMORY_SHORT → MEMORY_LONG → COMPLETE`
+- 初创项目：仅当首次任务跳过了前置 INIT 时，执行 `post_v1_auto_init` 初始化资产回补，然后进入 `MEMORY → COMPLETE`
+- 迭代项目：直接进入 `MEMORY → COMPLETE`
 
 不得因为上一阶段是 REVIEW，就在用户确认结果后停留在 REVIEW、只输出普通确认回复，或要求用户再次显式触发 Easy Coding。
