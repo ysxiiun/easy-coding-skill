@@ -1,8 +1,8 @@
 ---
 name: easy-coding
-description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或要求加载 Easy Coding skill 时使用；已激活流程的确认续流可继续；若用户消息开头包含 `#no-coding`，当前轮跳过 skill 全部流程与约束。Spec 驱动的人机共创编程助手，支持固定阶段状态机、项目记忆、初创/迭代项目和 With Claude 联合模式。
+description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或要求加载 Easy Coding skill 时使用；已激活流程的确认续流可继续；若用户消息开头包含 `#no-coding`，当前轮跳过 skill 全部流程与约束。Spec 驱动的人机共创编程助手，支持固定阶段状态机、项目记忆、Canonical Spec 共享执行状态、初创/迭代项目和 With Claude 联合模式。
 metadata:
-  version: 5.0.0
+  version: 5.1.0
 ---
 
 # 🔴 核心约束（每轮对话必须遵守）
@@ -130,7 +130,8 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 - 扫描目录结构、列出文件名、读取文件正文、查看配置、查看文件编码
 - 使用 `rg` / `find` / `ls` / `pwd` / `cat` / `sed -n` 等只读命令理解项目
 - 读取 `.easy-coding/` 固定资产与 Spec / Prototype 输入
-- 仅扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件名
+- 用户未显式提供 Dev-Spec 路径时，仅扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件名
+- 用户显式提供 Dev-Spec 路径时，只读取该原始 locator 指向的文件，不复制到项目目录
 - 用户选定 Dev-Spec 后调用当前已加载 Skill 根目录下的 `scripts/inspect_dev_spec.py`，做只读 manifest、仓库、任务和基线检查
 - 查看 `git status` / `git diff` / `git log` 等只读状态与历史
 
@@ -147,6 +148,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 - 创建、删除、移动、重命名文件或目录
 - 格式化、自动修复、代码生成、依赖安装、构建输出、测试写快照等可能写入文件的命令
 - 生成或更新 `.easy-coding/` 初始化资产、短期记忆、长期记忆沉淀结果
+- 初始化或更新原 Canonical Spec 的共享 execution 区域
 - 旧版记忆兼容迁移（仅限 `.easy-coding/memory/`）
 - `git add` / `git commit` / `git push` 等提交或远端状态变更
 
@@ -350,8 +352,8 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 14. `.easy-coding/prototype/index.html` 与 `.easy-coding/prototype/` 下的页面 HTML 文件
 15. `.easy-coding/prototype/assets/` 下与原型行为、样式或 mock 数据相关的资源文件
 16. `.easy-coding/prototype/images/` 下的 AI 原生生图原型图片
-17. 扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件（仅扫描文件名，不自动读取正文）
-18. 若用户显式引用任意具体 Markdown Dev-Spec 路径，直接将其作为当前候选
+17. 若用户显式引用任意具体 Markdown Dev-Spec 路径，将该原始路径作为唯一候选并跳过候选目录扫描
+18. 仅在用户未提供具体路径时，扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件（仅扫描文件名，不自动读取正文）
 
 ## 读取规则
 
@@ -370,9 +372,9 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 
 ## Dev-Spec 候选处理
 
-- `.easy-coding/spec/dev/` 仅作为运行时候选目录，不属于固定全局 Spec 输入。
+- `.easy-coding/spec/dev/` 仅作为未显式给路径时的兼容候选目录，不属于固定全局 Spec 输入。
 - 扫描时只列出候选 Markdown 文件，不自动读取正文；候选按相对路径字典序稳定排序并生成 1 开始的编号。
-- 用户显式引用具体 Dev-Spec 路径时，直接使用该路径，不再要求按编号二次选择。
+- 用户显式引用绝对或相对 Dev-Spec 路径时，原路径是唯一候选：直接解析为绝对 locator，不扫描 `.easy-coding/spec/dev/`，不要求复制、不按编号二次选择。
 - 若发现候选文件，且当前需求尚未选定 Dev-Spec：
   - 在 `ANALYSIS` 阶段先输出短提示，并必须列出完整候选编号清单；只显示数量、不显示文件名视为失败。
   - 选择协议统一为编号多选：`1,3` 表示加载第 1 和第 3 个文件，`1-3` 表示加载连续区间，`all` / `全部` 表示加载全部，`none` / `不加载` 表示不加载。
@@ -389,7 +391,9 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
 - Canonical Spec 路由完成后：
   - 用户明确 task ID 时用重复的 `--task <task-id>` 运行完整检查；用户明确要求完成当前仓库时才允许不传 `--task` 选择该仓全部 READY task。
   - 只把脚本返回的 `scope_markdown` 作为当前需求已选 Dev-Spec 上下文。
-  - 记录 `spec_id`、`source_sha256`、`selected_task_ids`、`repo_ids`、`dependency_gaps`、`baseline_status` 和 `scope_sha256`。
+  - 记录解析后的绝对 `source_path`、`schema`、`spec_id`、`revision`、`design_sha256`、`design_scope_sha256`、`execution_revision`、`execution_scope_sha256`、`selected_task_ids`、`repo_ids`、`dependency_gaps` 和 `baseline_status`；`source_sha256 / document_sha256` 只作整文诊断。
+  - Canonical 身份固定为 `schema + spec_id + revision + design_sha256`。locator 失效时必须由用户或已知路径重新绑定，并核对 `spec_id + design_sha256`；禁止按文件名猜测同一份 Spec。
+  - task catalog 的 `status` 是静态设计状态，`execution_status` 才是实际执行状态；不得把 `READY` 解释为代码已完成。
   - 不读取未选 task 的正文，不重新要求用户描述已由选中 task 明确表达的需求。
 - 若用户明确表示“不加载”：
   - 若当前轮也没有任何足以支撑分析的有效提示词，且不存在可补足上下文的固定 Spec / Prototype 输入，直接输出：
@@ -397,7 +401,7 @@ Easy Coding 用户可见阶段标签只能从以下集合中选择：
     - 当前轮到此结束，不进入 `WAITING_CONFIRM`，不产出技术方案。
   - 否则继续按现有流程分析。
   - 但必须在分析结果中标注具体“未加载 Dev-Spec”文件列表。
-- 已选 Dev-Spec、Canonical task 选择、`source_sha256` 与 `scope_sha256` 的生命周期仅限当前需求：
+- 已选 Dev-Spec、Canonical task 选择、绝对 locator 与设计/执行摘要的生命周期仅限当前需求：
   - 从本次 `ANALYSIS` 开始，持续到该需求结束或用户明确切换/清空为止。
   - 不写入 `.easy-coding/spec/` 固定输入集合。
   - 不写入 `.easy-coding/memory/`，不作为后续需求默认输入。
@@ -639,8 +643,8 @@ INIT 阶段必须在输出背景摘要、进入 `ANALYSIS` 之前，先对记忆
 - 业务子域与影响范围
 - 现状代码结构与关键实现位置
 - Spec 输入是否参与本次分析
-- Canonical Spec 的 `spec_id / source_sha256 / selected_task_ids / repo_ids / scope_sha256`（若有）
-- Canonical task 的依赖缺口、执行 Wave 与 baseline 状态（若有）
+- Canonical Spec 的 `source_path / schema / spec_id / revision / design_sha256 / design_scope_sha256 / execution_revision / execution_scope_sha256 / selected_task_ids / repo_ids`（若有）
+- Canonical task 的实际 `execution_status`、依赖缺口、执行 Wave 与 baseline 状态（若有）；静态 `READY` 不等于执行完成
 - 是否涉及前端实现
 - 是否存在提示词与 Spec 冲突
 - 是否存在 Spec 与现有代码冲突
@@ -654,6 +658,7 @@ INIT 阶段必须在输出背景摘要、进入 `ANALYSIS` 之前，先对记忆
 - Claude 还在运行、尚未返回最终 worker contract 时，用户可见进展必须保持 `[阶段：ANALYSIS]`。
 - 等待期间只能输出“Claude 协作进展 / 当前已读证据 / 仍在等待最终 contract”，不能输出正式技术方案，不能进入 `WAITING_CONFIRM`。
 - 只有 Claude 返回 `done` / `blocked` / `needs_user_input` 后，才能合并结果：`done` 输出完整 2.5 技术方案，`blocked` 输出完整 2.5 技术方案并在 `### Claude 协作` 标注 `Claude pass unavailable`，`needs_user_input` 与 Easy Coding 自身问题去重后一次性询问用户。
+- Claude 返回期间若只有 `execution_revision / execution_scope_sha256` 变化，刷新共享进度后可继续使用只读分析；若 `design_sha256 / design_scope_sha256` 变化，必须丢弃旧结果并留在 `ANALYSIS` 重新分析。
 
 ## 2.4 前端任务专属分析
 
@@ -680,7 +685,9 @@ INIT 阶段必须在输出背景摘要、进入 `ANALYSIS` 之前，先对记忆
 3. RULES、ABSTRACT、用户提示词与 Canonical Spec 的冲突。
 4. task Wave、仓库路径映射与依赖状态。
 5. 本轮文件、符号、测试和 integration 门禁。
-6. 原 Spec 的 `source_sha256`、消费闭包的 `scope_sha256` 与进入 `WAITING_CONFIRM` 所需的完整确认信息。
+6. 原 Spec 的 `design_sha256`、消费闭包的 `design_scope_sha256`、当前 `execution_revision / execution_scope_sha256` 与进入 `WAITING_CONFIRM` 所需的完整确认信息；`source_sha256` 仅作诊断。
+
+共享 execution 依赖门禁必须按实际投影判断：`hard` 只在前置任务 `completed` 或依赖边已有显式满足证据时放行；`contract` 由 `READY` 静态设计和冻结契约满足；`integration` 不阻断本仓编码，但阻断 Canonical task 写入 `completed`。无 execution 的旧 Canonical v1 可继续只读分析；进入开发的技术方案必须明确包含“初始化共享 execution 并回写原文件”，用户确认方案后才允许执行 `init`。
 
 快速路径不得重新选择接口类型、重新命名字段、重新拆 task，或把 Canonical Spec 改写成另一份平行技术方案。条件不满足时继续执行 2.5 的完整方案；`scope-drifted` 必须先读取漂移文件和符号，并列出 Spec 修订项。
 
@@ -795,12 +802,17 @@ INIT 阶段必须在输出背景摘要、进入 `ANALYSIS` 之前，先对记忆
 - 未加载 Dev-Spec：{文件路径列表/无}
 - Dev-Spec 协议：{legacy/canonical-v1/无}
 - Canonical Spec：{spec_id/无}
-- Source SHA-256：{source_sha256/无}
+- 绝对 locator：{source_path/无}
+- Canonical 身份：{schema + spec_id + revision + design_sha256/无}
+- Source/Document SHA-256（仅诊断）：{source_sha256 / document_sha256/无}
+- Design SHA-256：{design_sha256/无}
 - 已选任务：{selected_task_ids/无}
+- 实际执行状态：{execution_status/无 execution}
 - 仓库范围：{repo_ids 与路径映射/无}
 - 依赖缺口：{dependency_gaps/无}
 - Baseline：{各 repo 状态/无}
-- Scope SHA-256：{scope_sha256/无}
+- Design Scope SHA-256：{design_scope_sha256/无}
+- Execution Revision / Scope SHA-256：{execution_revision / execution_scope_sha256/无 execution}
 ```
 
 **命中 Easy Coding With Claude 联合模式时，输出：**
@@ -919,7 +931,7 @@ INIT 阶段必须在输出背景摘要、进入 `ANALYSIS` 之前，先对记忆
 ## 4.2 实施前必须加载
 
 - `.easy-coding/RULES.md`
-- 若当前需求使用 Canonical Spec：重新确认当前 task 的消费闭包、相关契约、`source_sha256` 和 `scope_sha256`
+- 若当前需求使用 Canonical Spec：先执行 writer `show`，重新确认当前 task 消费闭包、相关契约、`design_sha256 / design_scope_sha256 / execution_revision / execution_scope_sha256`
 - 若涉及前端：按需读取 `references/design/apple-design-reference.md`
 
 ## 4.3 实施约束
@@ -928,7 +940,10 @@ INIT 阶段必须在输出背景摘要、进入 `ANALYSIS` 之前，先对记忆
 - 必须严格按照已确认的“改动范围”实施；不得新增、删除或修改未列入方案的文件，除非先回到 ANALYSIS 输出完整修订方案并重新确认
 - Canonical Spec task 只允许修改其 `repo_id` 下 `change_ids` 声明的 path 与 symbols；新增文件、符号或步骤时必须返回 ANALYSIS 修订范围并重新确认
 - Canonical task 按 Wave、`step_ids` 和 step dependency 执行；每个 step 完成后执行绑定的 `test_ids` 命令
-- hard dependency 未满足时不得进入被阻断 task；integration 未完成不阻断本仓编码，但必须在实施报告中标记待联调，不能宣称全链路完成
+- Canonical task 必须按 `references/dev-spec/canonical-v1.md` 的 writer 顺序更新原 Spec：`show` 校验确认摘要 → 必要时 `init` → task `in_progress` 成功后才改业务代码 → Step `completed/failed` → task `implemented` → task `verified`；每次写入都携带稳定 run ID、幂等键和预期设计/执行修订
+- hard dependency 未满足时不得进入被阻断 task；integration 未完成不阻断本仓编码，但阻断 task `completed`，实施报告必须标记待联调，不能宣称 Canonical task 或全链路完成
+- writer 返回冲突退出码 `3` 时重新 `show`，只重放当前事件；若设计或设计范围摘要变化，立即停止实施并返回 `ANALYSIS`
+- 若实施发现静态设计需调整，停止当前 Step；必须重新确认修改原 Spec、使 `revision` 恰好加一、通过静态校验并执行 `sync-design`。受影响任务及全部后继任务按 writer 重置，不恢复旧证据
 - 必须严格遵守已确认的文件编码字段：修改旧文件保持原编码；新建文件使用项目编码；不得擅自转换文件编码，除非用户明确要求
 - 新建文件若因项目模板、同类文件惯例或用户要求需要作者署名，必须写为 `${Agent Name} with Easy Coding`；`${Agent Name}` 由当前宿主 Agent 替换为自己的名称，例如 `Codex with Easy Coding`
 - 编码时必须补充必要注释，并将其视为交付门禁；重点覆盖非直观业务规则、兼容/兜底逻辑、协议字段映射、异常处理、幂等/并发/缓存、配置 key 含义、风险或易错边界
@@ -1029,6 +1044,8 @@ Claude review 的 `accept`、host 自检通过、测试通过、构建通过都�
 
 用户确认实施结果后，联合模式仍按项目模式进入后续流程，不能停留在 REVIEW：
 
+- 若当前需求使用 Canonical Spec：先重新 `show`。只有用户已确认实施结果且 integration 已满足，才把已 `verified` 的 task 写为 `completed`；integration 未闭合时保持 `verified`，在后续报告中明确“Easy Coding 流程结束不等于 Canonical task 已完成”
+
 - `初创项目`
   - 若首次任务跳过了前置 INIT：初始化资产回补 → MEMORY → COMPLETE
   - 若已完成前置 INIT 或无需回补：MEMORY → COMPLETE
@@ -1095,7 +1112,7 @@ EASY-CODING 已完成代码编写，请您检查代码变动，如有不妥，�
 
 1. 读取并遵循 `flow/with-claude.md` 的 REVIEW 子流程。
 2. 调用 With Claude 的 `post_implementation_review` flow 构建只读任务 packet。
-3. 启动或尝试启动 With Claude worker：优先使用 `/Users/ysxiiun/.codex/skills/with-claude/scripts/run_claude_worker.py`，不可用时才使用源仓库 fallback。
+3. 启动或尝试启动当前已加载 `$with-claude` skill 根目录下的 `scripts/run_claude_worker.py`；若无法解析已加载 skill 路径，按不可用降级，禁止猜测用户目录或源码仓库路径。
 4. 等待 Claude final worker contract；只有收到 final contract 后，才能把 `accept` / `fix` / `replan` 作为 Claude verdict。
 5. Claude 只能读取和 review，禁止编辑、patch、格式化、提交、推送或发布。
 6. host agent 负责合并 Claude verdict 与本地事实，并决定处理方式。

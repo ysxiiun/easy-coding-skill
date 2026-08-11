@@ -59,13 +59,13 @@ Easy Coding 联合模式的 ANALYSIS 固定使用 With Claude `readonly_analysis
 
 ## Claude Worker 调用
 
-默认调用方式：
+先从当前已加载 `$with-claude` skill 的实际入口解析 `<with-claude-skill-dir>`，再调用：
 
 ```bash
-python3 -B /Users/ysxiiun/.codex/skills/with-claude/scripts/run_claude_worker.py --cwd "$PWD" < task-packet-stdin
+python3 -B <with-claude-skill-dir>/scripts/run_claude_worker.py --cwd "$PWD" < task-packet-stdin
 ```
 
-若全局安装路径不可用，可退回到源仓库路径 `/Users/ysxiiun/Documents/agent-skill/with-claude/scripts/run_claude_worker.py`；无论使用哪个路径，都必须保持同等只读约束。
+不得猜测 `$HOME`、用户目录或源码仓库中的 fallback。已加载 skill 路径无法解析或 wrapper 不存在时，按 Claude 不可用降级；无论是否成功调用，都必须保持同等只读约束。
 
 任务包必须包含：
 
@@ -130,7 +130,7 @@ INIT 输出必须补充：
 执行方式：
 
 1. host agent 完成 Easy Coding 既有只读上下文采集。
-2. 构建 Claude 只读任务包，包含用户需求、当前项目模式、已读文件摘要、候选 Dev-Spec 状态、冲突点和待决策点；若命中 Canonical Spec，必须携带 `spec_id`、`source_digest`、`selected_task_ids`、`repo_ids`、`dependency_summary` 和 `scope_digest`。
+2. 构建 Claude 只读任务包，包含用户需求、当前项目模式、已读文件摘要、候选 Dev-Spec 状态、冲突点和待决策点；若命中 Canonical Spec，必须携带 `spec_id`、诊断用 `source_digest`、`design_digest`、`design_scope_digest`、`execution_revision`、`execution_scope_digest`、`selected_task_ids`、`repo_ids` 和 `dependency_summary`。
 3. Claude 运行期间，所有用户可见进度更新都保持 `[阶段：ANALYSIS]`。
 4. 等待 Claude 时只能输出 Claude 协作进展、当前已读证据和等待最终 contract 的状态；不得提前输出正式技术方案，也不得进入 `WAITING_CONFIRM`。
 5. Claude 返回六字段 worker contract 后，host agent 合并结果，输出 Easy Coding 的 ANALYSIS 方案。
@@ -140,7 +140,7 @@ Canonical Spec 附加门禁：
 
 - 只向 Claude 提供 `scripts/inspect_dev_spec.py` 生成的消费闭包，不传未选 task 正文。
 - `add_read_dirs` 只允许选中 repo 的必要代码目录，不得用 Spec 所在父目录扩大读取范围。
-- Host 与 Claude packet 必须记录相同 `source_sha256` 和 `scope_sha256`；任一 digest 不一致时丢弃 worker 结果并重新构造 packet。
+- Host 与 Claude packet 必须记录相同 `design_sha256` 和 `design_scope_sha256`；Claude 返回期间若只有 `execution_revision / execution_scope_sha256` 变化，Host 刷新共享进度后继续使用只读分析；若设计或设计范围摘要变化，丢弃 worker 结果并回到 `ANALYSIS`。`source_sha256` 仅作整文诊断，不作为静态方案失效门禁。
 - Claude 返回未选仓库文件、符号、调用链或实施步骤时，丢弃越界部分，并在 `### Claude 协作` 中记录越界。
 
 如果 Claude 返回 `needs_user_input`，host agent 必须把 Claude 问题与 Easy Coding 自身问题去重后一次性问用户。
@@ -159,7 +159,7 @@ host agent 必须：
 2. 严格遵守改动范围、文件编码、注释策略和验证要求。
 3. 变更范围扩大时回到 ANALYSIS / WAITING_CONFIRM。
 4. 实施完成后进入 REVIEW，而不是直接进入记忆阶段。
-5. Canonical task 只能修改已确认的 `change_ids` path/symbols，并按 `step_ids` 与 `test_ids` 执行；Claude 不参与 IMPLEMENT。
+5. Canonical task 只能修改已确认的 `change_ids` path/symbols，并按 `step_ids` 与 `test_ids` 执行；Host 按共享 writer 顺序更新 task/Step 状态，Claude 不参与 IMPLEMENT。
 
 ---
 
@@ -176,7 +176,7 @@ REVIEW 必须按以下闭环执行：
 3. 等待 Claude final worker contract，并记录调用状态、wrapper path、final contract 接收状态和 worker status。
 4. host agent 只能在 `Claude 调用状态=executed` 且 `final contract=received` 时合并 Claude `accept` / `fix` / `replan` verdict。
 5. 若未执行、启动失败、被阻断或未收到 final contract，REVIEW 只能映射为 `blocked`，标注 `Claude review unavailable`，并把 host self-review 作为降级说明，不能伪造成 Claude verdict。
-6. Canonical Spec 场景下，review packet 继续携带已确认的 task/change/test ID、`source_digest` 和 `scope_digest`；review 不得借机扩大实现范围。
+6. Canonical Spec 场景下，review packet 继续携带已确认的 task/change/test ID、诊断用 `source_digest`、`design_digest`、`design_scope_digest`、`execution_revision` 和 `execution_scope_digest`；review 不得借机扩大实现范围。只有 execution 变化时刷新进度，设计摘要变化时丢弃旧 review 并返回 `ANALYSIS`。
 
 任务包必须包含：
 
@@ -258,6 +258,8 @@ Claude review 的 `accept`、host 自检通过、测试通过、构建通过都�
 若当前 agent 暴露 `request_user_input` 或等价原生选择工具，实施结果报告后必须调用工具等待“确认结果”；若当前 agent 不支持原生选择工具，才使用文本兜底确认。
 
 用户确认实施结果后，再按项目模式进入后续流程：
+
+- Canonical task：确认后先刷新 execution；integration 已满足时由 Host 写 `completed`，未满足时保留 `verified` 并明确 Canonical task 尚未完成
 
 - 初创项目：仅当首次任务跳过了前置 INIT 时，执行 `post_v1_auto_init` 初始化资产回补，然后进入 `MEMORY → COMPLETE`
 - 迭代项目：直接进入 `MEMORY → COMPLETE`

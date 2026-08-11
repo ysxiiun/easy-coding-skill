@@ -20,6 +20,8 @@
 | ANALYSIS 等待 Claude | Claude 未返回最终 worker contract | 用户可见输出仍为 `[阶段：ANALYSIS]`，只汇报协作进展和已读证据，不输出正式方案，不进入 `WAITING_CONFIRM` |
 | ANALYSIS Claude done | Claude 返回 done | host 合并 Claude 结论后，按 `SKILL.md` 2.5 完整模板输出技术方案，并进入 `WAITING_CONFIRM` |
 | ANALYSIS Claude blocked | Claude 返回 blocked | host 继续输出完整技术方案，`### Claude 协作` 标注 `Claude pass unavailable` |
+| Canonical 仅执行态变化 | Claude ANALYSIS / REVIEW 返回前，`execution_revision` 或 `execution_scope_sha256` 变化，但 `design_sha256` 与 `design_scope_sha256` 未变 | host 刷新共享进度与依赖状态，继续使用当前只读结果；`source_sha256` 的变化不单独使方案失效 |
+| Canonical 设计变化 | Claude ANALYSIS / REVIEW 返回前，`design_sha256` 或 `design_scope_sha256` 变化 | host 丢弃旧 worker 结果并返回 `[阶段：ANALYSIS]`，不得沿用旧方案或旧 review verdict |
 | IMPLEMENT 联合 | 用户已确认方案 | 不调用 Claude；host 按已确认方案独立实施 |
 | PLAN 阶段误用 | With Claude task packet 含 `phase` / `workflow_type` | Easy Coding 不存在 `[阶段：PLAN]`；With Claude 的 `workflow_type` / `phase` 不得作为 Easy Coding 阶段输出 |
 | 非法阶段误用 | 验证、测试、自检或完成汇报 | 不得输出 `[阶段：VERIFY]` / `[阶段：TEST]` / `[阶段：DONE]` / `[阶段：REVIEW_BLOCKED]`；验证和自检仍用 `[阶段：IMPLEMENT]`，完成只能用 `[阶段：COMPLETE]` |

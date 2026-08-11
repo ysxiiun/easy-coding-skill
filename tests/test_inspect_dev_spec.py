@@ -1,38 +1,37 @@
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from scripts.inspect_dev_spec import (
+from scripts.dev_spec_execution import initialize_execution, record_dependency_status
+from scripts.easy_dev_spec_protocol import (
+    MANIFEST_BEGIN,
+    MANIFEST_END,
     CanonicalSpecError,
+    design_sha256,
+    parse_manifest,
+    select_scope,
+    validate_spec,
+)
+from scripts.inspect_dev_spec import (
     RepositoryAmbiguityError,
     SelectionError,
-    _filter_integration,
-    _scope_files_for_repo,
     classify_baseline,
-    inspect_spec,
     inspect_manifest,
+    inspect_spec,
     match_repository,
     normalize_remote,
-    parse_manifest,
-    parse_sections,
-    render_scope,
-    select_tasks,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "inspect_dev_spec.py"
-VALID_FIXTURE = ROOT / "tests" / "fixtures" / "canonical-v1-valid.md"
-FINAL_PRODUCER_FIXTURE = ROOT / "tests" / "fixtures" / "easy-dev-spec-v1-final.md"
-FINAL_PRODUCER_FIXTURE_SHA256 = (
-    "57171e63a5d2149866999276e10f1aa829c5f92ed77f8db5d8419443002f8022"
-)
+VALID_FIXTURE = ROOT / "tests" / "fixtures" / "easy-dev-spec-v1-final.md"
 LEGACY_FIXTURE = ROOT / "tests" / "fixtures" / "legacy-dev-spec.md"
 
 
@@ -45,21 +44,30 @@ def git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProce
     )
 
 
-def create_repo(parent: Path, name: str, remote: str | None = None) -> tuple[Path, str]:
+def create_repo(parent: Path, repo_id: str, remote: str | None = None) -> tuple[Path, str]:
+    name = "order-service" if repo_id == "R1" else "notification-service"
     repo = parent / name
     repo.mkdir()
     git(repo, "init", "-q")
     git(repo, "config", "user.email", "tests@example.com")
     git(repo, "config", "user.name", "Easy Coding Tests")
-    (repo / "scripts").mkdir()
-    (repo / "downstream").mkdir()
-    (repo / "tests").mkdir()
-    (repo / "scripts" / "inspect_dev_spec.py").write_text("# parser\n", encoding="utf-8")
-    (repo / "SKILL.md").write_text("# skill\n", encoding="utf-8")
-    (repo / "downstream" / "secret.py").write_text("# secret\n", encoding="utf-8")
-    (repo / "tests" / "test_inspect_dev_spec.py").write_text(
-        "# tests\n", encoding="utf-8"
+    files = (
+        [
+            "order-domain/src/main/java/com/example/order/OrderEventPublisher.java",
+            "order-domain/src/test/java/com/example/order/OrderEventPublisherTest.java",
+            "order-api/src/main/java/com/example/order/api/DeliveryStatusController.java",
+            "order-api/src/test/java/com/example/order/api/DeliveryStatusControllerTest.java",
+        ]
+        if repo_id == "R1"
+        else [
+            "notification-app/src/main/java/com/example/notification/OrderEventConsumer.java",
+            "notification-app/src/test/java/com/example/notification/OrderEventConsumerTest.java",
+        ]
     )
+    for relative in files:
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("// fixture\n", encoding="utf-8")
     git(repo, "add", ".")
     git(repo, "commit", "-q", "-m", "initial")
     if remote:
@@ -67,787 +75,396 @@ def create_repo(parent: Path, name: str, remote: str | None = None) -> tuple[Pat
     return repo, git(repo, "rev-parse", "HEAD").stdout.strip()
 
 
-class CanonicalSpecInspectionTest(unittest.TestCase):
+def replace_manifest(text: str, manifest: dict) -> str:
+    start = text.index(MANIFEST_BEGIN) + len(MANIFEST_BEGIN)
+    end = text.index(MANIFEST_END)
+    block = "\n```json\n" + json.dumps(manifest, ensure_ascii=False, indent=2) + "\n```\n"
+    return text[:start] + block + text[end:]
+
+
+def bind_baselines(text: str, baselines: dict[str, str]) -> str:
+    manifest = parse_manifest(text)
+    assert manifest is not None
+    bound = text
+    for repository in manifest["repositories"]:
+        if repository["repo_id"] in baselines:
+            bound = bound.replace(
+                repository["baseline"]["commit"], baselines[repository["repo_id"]]
+            )
+    report = validate_spec(bound, require_ready=True)
+    if not report.ok:
+        raise AssertionError([issue.to_dict() for issue in report.issues])
+    return bound
+
+
+def sha256_json(value: object) -> str:
+    canonical = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+class InspectDevSpecTest(unittest.TestCase):
     def setUp(self) -> None:
         self.valid_text = VALID_FIXTURE.read_text(encoding="utf-8")
         self.manifest = parse_manifest(self.valid_text)
+        assert self.manifest is not None
 
-    def test_parse_valid_manifest_and_sections(self) -> None:
-        self.assertEqual(self.manifest["schema"], "easy-dev-spec/v1")
-        self.assertEqual(self.manifest["spec_id"], "EDS-20260805-fixture")
-        sections = parse_sections(self.valid_text)
-        self.assertIn("global-context", sections)
-        self.assertIn("task-r2-t1", sections)
-
-    def test_final_easy_dev_spec_fixture_is_forward_compatible(self) -> None:
-        text = FINAL_PRODUCER_FIXTURE.read_text(encoding="utf-8")
-        source_sha256 = hashlib.sha256(text.encode("utf-8")).hexdigest()
-        self.assertEqual(source_sha256, FINAL_PRODUCER_FIXTURE_SHA256)
-        manifest = parse_manifest(text)
-        self.assertEqual(manifest["spec_id"], "order-notification-2026")
-        selection = select_tasks(manifest, ["R1"], ["R1-T2"])
-        scope = render_scope(text, selection)
-        self.assertIn(f'"source_sha256": "{source_sha256}"', scope)
-        self.assertIn("`R1-T1` contract", scope)
-        self.assertIn("`R2-T1` integration", scope)
-        self.assertNotIn("OrderEventPublisher.java", scope)
-        self.assertNotIn("OrderEventConsumer.java", scope)
-        self.assertNotIn("## Task R1-T1", scope)
-        self.assertNotIn("## Task R2-T1", scope)
-
-    def test_legacy_document_has_no_manifest(self) -> None:
-        self.assertEqual(parse_manifest(LEGACY_FIXTURE.read_text(encoding="utf-8")), {})
-
-    def test_duplicate_manifest_is_rejected(self) -> None:
-        duplicated = self.valid_text + "\n" + self.valid_text
-        with self.assertRaisesRegex(CanonicalSpecError, "exactly one manifest"):
-            parse_manifest(duplicated)
-
-    def test_invalid_json_is_rejected(self) -> None:
-        invalid = self.valid_text.replace('"revision": 1,', '"revision": 1,,', 1)
-        with self.assertRaisesRegex(CanonicalSpecError, "invalid manifest JSON"):
-            parse_manifest(invalid)
-
-    def test_manifest_requires_strict_json_fence_layout(self) -> None:
-        inline = self.valid_text.replace(
-            "```json\n{", "```json{", 1
+    def _environment(self, parent: Path, include_r2: bool = False) -> tuple[Path, Path, Path | None]:
+        r1, r1_head = create_repo(
+            parent, "R1", "git@example.com:demo/order-service.git"
         )
-        with self.assertRaisesRegex(CanonicalSpecError, "one json code fence"):
-            parse_manifest(inline)
+        r2: Path | None = None
+        baselines = {"R1": r1_head}
+        if include_r2:
+            r2, r2_head = create_repo(
+                parent,
+                "R2",
+                "https://example.com/demo/notification-service.git",
+            )
+            baselines["R2"] = r2_head
+        spec = parent / "external-spec.md"
+        spec.write_text(bind_baselines(self.valid_text, baselines), encoding="utf-8")
+        return spec, r1, r2
 
-        extra_fence = self.valid_text.replace(
-            "<!-- EDS:MANIFEST:END -->",
-            "```json\n{}\n```\n<!-- EDS:MANIFEST:END -->",
-            1,
-        )
-        with self.assertRaises(CanonicalSpecError):
-            parse_manifest(extra_fence)
-
-    def test_future_schema_is_rejected(self) -> None:
-        future = self.valid_text.replace("easy-dev-spec/v1", "easy-dev-spec/v2", 1)
-        with self.assertRaisesRegex(CanonicalSpecError, "unsupported schema"):
-            parse_manifest(future)
-
-    def test_ready_spec_rejects_non_ready_task(self) -> None:
-        manifest = copy.deepcopy(self.manifest)
-        manifest["tasks"][0]["status"] = "DRAFT"
-        with self.assertRaisesRegex(CanonicalSpecError, "READY spec contains non-READY tasks"):
-            parse_manifest(self._replace_manifest(manifest))
-
-    def test_invalid_reference_type_is_a_canonical_error(self) -> None:
-        manifest = copy.deepcopy(self.manifest)
-        manifest["contracts"][0]["consumer_task_ids"] = [{}]
-        with self.assertRaisesRegex(CanonicalSpecError, "consumer_task_ids"):
-            parse_manifest(self._replace_manifest(manifest))
-
-    def test_invalid_enum_types_are_canonical_errors(self) -> None:
-        mutations = (
-            ("task status", lambda manifest: manifest["tasks"][0].update(status={})),
-            (
-                "dependency type",
-                lambda manifest: manifest["tasks"][1]["depends_on"][0].update(type=[]),
-            ),
-            ("change action", lambda manifest: manifest["changes"][0].update(action={})),
-        )
-        for label, mutate in mutations:
-            with self.subTest(label=label):
-                manifest = copy.deepcopy(self.manifest)
-                mutate(manifest)
-                with self.assertRaises(CanonicalSpecError):
-                    parse_manifest(self._replace_manifest(manifest))
-
-    def test_manifest_enforces_authoritative_v1_structure(self) -> None:
-        mutations = (
-            ("missing revision", lambda manifest: manifest.pop("revision")),
-            ("boolean revision", lambda manifest: manifest.update(revision=True)),
-            (
-                "missing path hint",
-                lambda manifest: manifest["repositories"][0].pop("path_hint"),
-            ),
-            (
-                "missing baseline ref",
-                lambda manifest: manifest["repositories"][0]["baseline"].pop("ref"),
-            ),
-            (
-                "empty tech stack",
-                lambda manifest: manifest["repositories"][0].update(tech_stack=[]),
-            ),
-            (
-                "missing dependency evidence",
-                lambda manifest: manifest["tasks"][1]["depends_on"][0].pop(
-                    "required_evidence"
-                ),
-            ),
-            (
-                "missing change module",
-                lambda manifest: manifest["changes"][0].pop("module"),
-            ),
-        )
-        for label, mutate in mutations:
-            with self.subTest(label=label):
-                manifest = copy.deepcopy(self.manifest)
-                mutate(manifest)
-                with self.assertRaises(CanonicalSpecError):
-                    parse_manifest(self._replace_manifest(manifest))
-
-    def test_manifest_rejects_invalid_ids_and_non_portable_paths(self) -> None:
-        invalid_id = copy.deepcopy(self.manifest)
-        invalid_id["tasks"][0]["change_ids"] = ["F0"]
-        invalid_id["steps"][0]["change_ids"] = ["F0"]
-        invalid_id["changes"][0]["change_id"] = "F0"
-        with self.assertRaisesRegex(CanonicalSpecError, "invalid change_id"):
-            parse_manifest(self._replace_manifest(invalid_id))
-
-        for path in (
-            "src\\main.py",
-            "C:/src/main.py",
-            "https://example.com/main.py",
-            " src/main.py",
-            "src//main.py",
-            "src/./main.py",
-        ):
-            with self.subTest(path=path):
-                manifest = copy.deepcopy(self.manifest)
-                manifest["changes"][0]["path"] = path
-                with self.assertRaises(CanonicalSpecError):
-                    parse_manifest(self._replace_manifest(manifest))
-
-    def test_nested_sections_are_rejected(self) -> None:
-        nested = (
-            "<!-- EDS:SECTION:BEGIN id=one -->\n"
-            "<!-- EDS:SECTION:BEGIN id=two -->\n"
-            "<!-- EDS:SECTION:END id=two -->\n"
-            "<!-- EDS:SECTION:END id=one -->"
-        )
-        with self.assertRaisesRegex(CanonicalSpecError, "nested section"):
-            parse_sections(nested)
+    def test_fixture_is_current_strict_protocol_and_has_no_execution(self) -> None:
+        report = validate_spec(VALID_FIXTURE, require_ready=True)
+        self.assertTrue(report.ok, [issue.to_dict() for issue in report.issues])
+        self.assertEqual("canonical-v1", report.protocol)
+        self.assertIsNone(report.execution)
+        self.assertIn("execution.missing", {warning.code for warning in report.warnings})
 
     def test_normalize_remote_variants(self) -> None:
         expected = "github.com/example/easy-coding"
         self.assertEqual(normalize_remote("git@github.com:example/easy-coding.git"), expected)
-        self.assertEqual(normalize_remote("ssh://git@github.com/example/easy-coding.git"), expected)
-        self.assertEqual(normalize_remote("https://token@github.com/example/easy-coding.git/"), expected)
+        self.assertEqual(
+            normalize_remote("ssh://git@github.com/example/easy-coding.git"), expected
+        )
+        self.assertEqual(
+            normalize_remote("https://token@github.com/example/easy-coding.git/"), expected
+        )
 
-    def test_match_repository_by_unique_remote(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            repo, _ = create_repo(
-                Path(temp), "different-name", "git@github.com:example/easy-coding.git"
+    def test_match_repository_prefers_remote_and_falls_back_only_without_one(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            remote_repo, _ = create_repo(
+                parent, "R1", "git@example.com:demo/order-service.git"
             )
-            match = match_repository(self.manifest, repo)
-            self.assertEqual(match.repo_id, "R1")
-            self.assertEqual(match.method, "remote")
+            match = match_repository(self.manifest, remote_repo)
+            self.assertEqual("R1", match.repo_id)
+            self.assertEqual("remote", match.method)
 
-    def test_match_repository_by_basename_when_remote_unavailable(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            repo, _ = create_repo(Path(temp), "easy-coding")
-            match = match_repository(self.manifest, repo)
-            self.assertEqual(match.repo_id, "R1")
-            self.assertEqual(match.method, "basename")
+        with tempfile.TemporaryDirectory() as directory:
+            basename_repo, _ = create_repo(Path(directory), "R1")
+            match = match_repository(self.manifest, basename_repo)
+            self.assertEqual("R1", match.repo_id)
+            self.assertEqual("basename", match.method)
 
-    def test_usable_but_mismatched_remote_does_not_fallback(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            repo, _ = create_repo(
-                Path(temp), "easy-coding", "git@github.com:someone/other.git"
-            )
+    def test_mismatched_usable_remote_cannot_be_overridden(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo, _ = create_repo(Path(directory), "R1", "git@example.com:other/repo.git")
             with self.assertRaisesRegex(SelectionError, "do not match"):
-                match_repository(self.manifest, repo)
+                inspect_spec(VALID_FIXTURE, repo, ["R1-T1"], [f"R1={repo}"])
 
-    def test_ambiguous_remote_is_rejected(self) -> None:
-        manifest = copy.deepcopy(self.manifest)
-        manifest["repositories"][1]["remote_urls"] = manifest["repositories"][0][
-            "remote_urls"
-        ]
-        with tempfile.TemporaryDirectory() as temp:
-            repo, _ = create_repo(
-                Path(temp), "easy-coding", "git@github.com:example/easy-coding.git"
+    def test_manifest_catalog_separates_design_and_execution_status(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            spec, r1, _ = self._environment(Path(directory))
+            result = inspect_manifest(spec, r1)
+            r1_t1 = next(task for task in result["task_catalog"] if task["task_id"] == "R1-T1")
+            self.assertEqual("READY", r1_t1["status"])
+            self.assertIsNone(r1_t1["execution_status"])
+            self.assertFalse(result["execution"]["available"])
+            initialize_execution(spec, expected_design_sha256=result["design_sha256"])
+            initialized = inspect_manifest(spec, r1)
+            r1_t1 = next(
+                task for task in initialized["task_catalog"] if task["task_id"] == "R1-T1"
             )
-            with self.assertRaisesRegex(RepositoryAmbiguityError, "multiple") as raised:
-                match_repository(manifest, repo)
+            self.assertEqual("READY", r1_t1["status"])
+            self.assertEqual("not_started", r1_t1["execution_status"])
+
+    def test_single_repo_scope_uses_upstream_digests_and_projection(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            spec, r1, _ = self._environment(Path(directory))
+            result = inspect_spec(spec, r1, ["R1-T1"], [])
+            upstream = select_scope(spec, "R1", ["R1-T1"], output_format="json")
+            self.assertEqual(upstream["design_sha256"], result["design_sha256"])
             self.assertEqual(
-                {candidate["repo_id"] for candidate in raised.exception.candidates},
-                {"R1", "R2"},
-            )
-
-    def test_ambiguous_current_repository_accepts_confirmed_repo_path(self) -> None:
-        manifest = copy.deepcopy(self.manifest)
-        manifest["repositories"][1]["remote_urls"] = manifest["repositories"][0][
-            "remote_urls"
-        ]
-        with tempfile.TemporaryDirectory() as temp:
-            parent = Path(temp)
-            repo, baseline = create_repo(
-                parent, "easy-coding", "git@github.com:example/easy-coding.git"
-            )
-            manifest["repositories"][0]["baseline"]["commit"] = baseline
-            spec = parent / "spec.md"
-            spec.write_text(self._replace_manifest(manifest), encoding="utf-8")
-            result = inspect_spec(spec, repo, ["R1-T1"], [f"R1={repo}"])
-            self.assertEqual(result["repositories"][0]["match"]["method"], "user-confirmed")
-
-    def test_default_selection_uses_all_ready_tasks_for_repo(self) -> None:
-        selection = select_tasks(self.manifest, ["R1"], [])
-        self.assertEqual(
-            [task["task_id"] for task in selection.selected_tasks], ["R1-T1", "R1-T2"]
-        )
-        self.assertEqual(selection.waves, [["R1-T1"], ["R1-T2"]])
-        self.assertEqual(selection.dependency_gaps, [])
-
-    def test_explicit_task_reports_unselected_hard_dependency(self) -> None:
-        selection = select_tasks(self.manifest, ["R1"], ["R1-T2"])
-        self.assertEqual(selection.dependency_gaps[0]["depends_on_task_id"], "R1-T1")
-        integration = [
-            item for item in selection.dependency_summaries if item["type"] == "integration"
-        ]
-        self.assertEqual(len(integration), 1)
-        self.assertFalse(integration[0]["selected"])
-        self.assertEqual(integration[0]["status"], "READY")
-
-    def test_contract_dependency_is_satisfied_only_for_ready_spec(self) -> None:
-        selection = select_tasks(self.manifest, ["R2"], ["R2-T1"])
-        self.assertEqual(selection.dependency_gaps, [])
-        draft = copy.deepcopy(self.manifest)
-        draft["status"] = "DRAFT"
-        draft_selection = select_tasks(draft, ["R2"], ["R2-T1"])
-        self.assertEqual(draft_selection.dependency_gaps[0]["reason"], "spec-not-ready")
-
-    def test_contract_dependency_does_not_serialize_waves(self) -> None:
-        selection = select_tasks(
-            self.manifest, ["R1", "R2"], ["R1-T1", "R2-T1"]
-        )
-        self.assertEqual(selection.waves, [["R1-T1", "R2-T1"]])
-
-    def test_contract_dependency_requires_contract_definition(self) -> None:
-        manifest = copy.deepcopy(self.manifest)
-        manifest["contracts"] = []
-        selection = select_tasks(manifest, ["R2"], ["R2-T1"])
-        self.assertEqual(selection.dependency_gaps[0]["reason"], "contract-missing")
-
-    def test_explicit_cross_repo_task_requires_resolved_path(self) -> None:
-        with self.assertRaisesRegex(SelectionError, "unresolved repository paths"):
-            select_tasks(self.manifest, ["R1"], ["R2-T1"])
-
-    def test_unknown_task_is_rejected(self) -> None:
-        with self.assertRaisesRegex(SelectionError, "unknown task_id"):
-            select_tasks(self.manifest, ["R1"], ["R1-T99"])
-
-    def test_dependency_cycle_is_rejected(self) -> None:
-        manifest = copy.deepcopy(self.manifest)
-        manifest["tasks"][0]["depends_on"] = [
-            {"task_id": "R1-T2", "type": "hard", "required_evidence": "test"}
-        ]
-        text = self._replace_manifest(manifest)
-        with self.assertRaisesRegex(CanonicalSpecError, "cycle"):
-            parse_manifest(text)
-
-    def test_step_cycle_is_rejected(self) -> None:
-        manifest = copy.deepcopy(self.manifest)
-        manifest["tasks"][0]["step_ids"].append("S4")
-        manifest["steps"][0]["depends_on_step_ids"] = ["S4"]
-        manifest["steps"].append(
-            {
-                "step_id": "S4",
-                "task_id": "R1-T1",
-                "change_ids": ["F1"],
-                "depends_on_step_ids": ["S1"],
-                "test_ids": ["T1"],
-            }
-        )
-        text = self._replace_manifest(manifest)
-        with self.assertRaisesRegex(CanonicalSpecError, "step dependency cycle"):
-            parse_manifest(text)
-
-    def test_cross_task_step_dependency_is_rejected(self) -> None:
-        manifest = copy.deepcopy(self.manifest)
-        manifest["steps"][1]["depends_on_step_ids"] = ["S1"]
-        text = self._replace_manifest(manifest)
-        with self.assertRaisesRegex(CanonicalSpecError, "outside task"):
-            parse_manifest(text)
-
-    def test_duplicate_section_id_is_rejected(self) -> None:
-        manifest = copy.deepcopy(self.manifest)
-        manifest["tasks"][1]["section_id"] = manifest["tasks"][0]["section_id"]
-        text = self._replace_manifest(manifest)
-        with self.assertRaisesRegex(CanonicalSpecError, "section_id"):
-            parse_manifest(text)
-
-    def test_scope_excludes_unselected_repository_implementation(self) -> None:
-        selection = select_tasks(self.manifest, ["R1"], ["R1-T1"])
-        scope = render_scope(self.valid_text, selection)
-        self.assertIn("scripts/inspect_dev_spec.py", scope)
-        self.assertIn('"symbols": [', scope)
-        self.assertIn("python3 -m unittest tests.test_inspect_dev_spec", scope)
-        self.assertIn("scope_sha256", scope)
-        self.assertIn("| 任务 | 对端 | 门禁 |", scope)
-        self.assertIn("| R2-T1 | R1-T1 | C1 已冻结 |", scope)
-        self.assertLess(scope.index("## Repository R1"), scope.index("## Contract C1"))
-        self.assertNotIn("| R1-T2 | R2-T1 | scope digest 一致 |", scope)
-        self.assertNotIn("downstream/secret.py", scope)
-        self.assertNotIn("## Task R2-T1", scope)
-
-    def test_scope_digest_is_deterministic(self) -> None:
-        selection = select_tasks(self.manifest, ["R1"], ["R1-T1"])
-        first = render_scope(self.valid_text, selection)
-        second = render_scope(self.valid_text, selection)
-        self.assertEqual(first, second)
-        source_sha256 = hashlib.sha256(self.valid_text.encode("utf-8")).hexdigest()
-        self.assertIn(f'"source_sha256": "{source_sha256}"', first)
-        self.assertEqual(
-            hashlib.sha256(first.encode("utf-8")).hexdigest(),
-            hashlib.sha256(second.encode("utf-8")).hexdigest(),
-        )
-
-    def test_source_digest_invalidates_scope_when_unselected_source_changes(self) -> None:
-        selection = select_tasks(self.manifest, ["R1"], ["R1-T1"])
-        changed_text = self.valid_text.replace(
-            "下游契约消费者。", "下游契约消费者，来源已修订。", 1
-        )
-        original_scope = render_scope(self.valid_text, selection)
-        changed_scope = render_scope(changed_text, selection)
-        self.assertNotIn("来源已修订", changed_scope)
-        self.assertNotEqual(original_scope, changed_scope)
-        self.assertNotEqual(
-            hashlib.sha256(original_scope.encode("utf-8")).hexdigest(),
-            hashlib.sha256(changed_scope.encode("utf-8")).hexdigest(),
-        )
-
-    def test_scope_digest_is_independent_of_task_argument_order(self) -> None:
-        forward = select_tasks(
-            self.manifest, ["R1", "R2"], ["R1-T1", "R2-T1"]
-        )
-        reversed_order = select_tasks(
-            self.manifest, ["R1", "R2"], ["R2-T1", "R1-T1"]
-        )
-        forward_scope = render_scope(self.valid_text, forward)
-        reversed_scope = render_scope(self.valid_text, reversed_order)
-        self.assertEqual(forward_scope, reversed_scope)
-        self.assertEqual(
-            hashlib.sha256(forward_scope.encode("utf-8")).hexdigest(),
-            hashlib.sha256(reversed_scope.encode("utf-8")).hexdigest(),
-        )
-
-    def test_integration_filter_uses_exact_task_ids(self) -> None:
-        selection = select_tasks(self.manifest, ["R1"], ["R1-T1"])
-        section = "\n".join(
-            (
-                "## Integration",
-                "### R1-T10 downstream/secret.py",
-                "| 任务 | 对端 | 门禁 |",
-                "| --- | --- | --- |",
-                "| R1-T1 | R2-T1 | selected |",
-                "| R1-T10 | R2-T1 | unselected |",
-            )
-        )
-        filtered = _filter_integration(section, selection)
-        self.assertIn("## Integration", filtered)
-        self.assertIn("| R1-T1 | R2-T1 | selected |", filtered)
-        self.assertNotIn("### R1-T10 downstream/secret.py", filtered)
-        self.assertNotIn("| R1-T10 | R2-T1 | unselected |", filtered)
-
-    def test_integration_filter_includes_direct_dependency_rows(self) -> None:
-        selection = select_tasks(self.manifest, ["R1"], ["R1-T2"])
-        section = parse_sections(self.valid_text)["integration-plan"]
-        filtered = _filter_integration(section, selection)
-        self.assertIn("| R1-T2 | R2-T1 | scope digest 一致 |", filtered)
-        self.assertIn("| R2-T1 | R1-T1 | C1 已冻结 |", filtered)
-
-    def test_manifest_rejects_noncanonical_section_id(self) -> None:
-        manifest = copy.deepcopy(self.manifest)
-        manifest["tasks"][0]["section_id"] = "custom-task-section"
-        text = self._replace_manifest(manifest).replace(
-            "id=task-r1-t1", "id=custom-task-section"
-        )
-        with self.assertRaisesRegex(CanonicalSpecError, "section_id must be task-r1-t1"):
-            parse_manifest(text)
-
-    def test_scope_rejects_noncanonical_section_order(self) -> None:
-        contract = "<!-- EDS:SECTION:BEGIN id=contract-c1 -->"
-        repository = "<!-- EDS:SECTION:BEGIN id=repo-r1 -->"
-        contract_offset = self.valid_text.index(contract)
-        repository_offset = self.valid_text.index(repository)
-        contract_end = self.valid_text.index(
-            "<!-- EDS:SECTION:END id=contract-c1 -->", contract_offset
-        ) + len("<!-- EDS:SECTION:END id=contract-c1 -->")
-        repository_end = self.valid_text.index(
-            "<!-- EDS:SECTION:END id=repo-r1 -->", repository_offset
-        ) + len("<!-- EDS:SECTION:END id=repo-r1 -->")
-        contract_block = self.valid_text[contract_offset:contract_end]
-        repository_block = self.valid_text[repository_offset:repository_end]
-        reordered = (
-            self.valid_text[:contract_offset]
-            + repository_block
-            + self.valid_text[contract_end:repository_offset]
-            + contract_block
-            + self.valid_text[repository_end:]
-        )
-        selection = select_tasks(self.manifest, ["R1"], ["R1-T1"])
-        with self.assertRaisesRegex(CanonicalSpecError, "section order"):
-            render_scope(reordered, selection)
-
-    def test_missing_required_scope_section_is_rejected(self) -> None:
-        selection = select_tasks(self.manifest, ["R1"], ["R1-T1"])
-        text = self.valid_text.replace(
-            "<!-- EDS:SECTION:BEGIN id=task-r1-t1 -->",
-            "<!-- EDS:SECTION:BEGIN id=missing-task-r1-t1 -->",
-        ).replace(
-            "<!-- EDS:SECTION:END id=task-r1-t1 -->",
-            "<!-- EDS:SECTION:END id=missing-task-r1-t1 -->",
-        )
-        with self.assertRaisesRegex(CanonicalSpecError, "missing required sections"):
-            render_scope(text, selection)
-
-    def test_baseline_classifications(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            repo, baseline = create_repo(Path(temp), "baseline-repo")
-            self.assertEqual(
-                classify_baseline(repo, baseline, ["scripts/inspect_dev_spec.py"]), "exact"
-            )
-
-            (repo / "unrelated.txt").write_text("unrelated\n", encoding="utf-8")
-            git(repo, "add", "unrelated.txt")
-            git(repo, "commit", "-q", "-m", "unrelated")
-            self.assertEqual(
-                classify_baseline(repo, baseline, ["scripts/inspect_dev_spec.py"]),
-                "scope-unchanged",
-            )
-
-            (repo / "scripts" / "inspect_dev_spec.py").write_text(
-                "# changed\n", encoding="utf-8"
-            )
-            git(repo, "add", "scripts/inspect_dev_spec.py")
-            git(repo, "commit", "-q", "-m", "scope change")
-            self.assertEqual(
-                classify_baseline(repo, baseline, ["scripts/inspect_dev_spec.py"]),
-                "scope-drifted",
+                upstream["design_scope_sha256"], result["design_scope_sha256"]
             )
             self.assertEqual(
-                classify_baseline(repo, "f" * 40, ["scripts/inspect_dev_spec.py"]),
-                "baseline-unavailable",
+                upstream["execution_scope_sha256"], result["execution_scope_sha256"]
+            )
+            self.assertEqual(upstream["execution"], result["execution"])
+            self.assertEqual(str(spec.resolve()), result["source_path"])
+            self.assertIn(str(spec.resolve()), result["scope_markdown"])
+            self.assertEqual(result["source_sha256"], result["document_sha256"])
+            self.assertNotIn("scope_sha256", result)
+
+    def test_full_inspection_uses_one_immutable_spec_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            spec, r1, _ = self._environment(Path(directory))
+            original_text = spec.read_text(encoding="utf-8")
+            original_document_sha = hashlib.sha256(original_text.encode("utf-8")).hexdigest()
+            original_design_sha = design_sha256(original_text)
+            sources: list[object] = []
+
+            def update_between_scope_calls(
+                source: object,
+                repo_id: str,
+                task_ids: list[str],
+                output_format: str = "markdown",
+            ) -> object:
+                sources.append(source)
+                if len(sources) == 1:
+                    initialize_execution(
+                        spec, expected_design_sha256=original_design_sha
+                    )
+                return select_scope(
+                    source, repo_id, task_ids, output_format=output_format
+                )
+
+            with patch(
+                "scripts.inspect_dev_spec.select_scope",
+                side_effect=update_between_scope_calls,
+            ):
+                result = inspect_spec(spec, r1, ["R1-T1"], [])
+
+            self.assertTrue(all(isinstance(source, str) for source in sources))
+            self.assertEqual(original_document_sha, result["document_sha256"])
+            self.assertFalse(result["execution"]["available"])
+            self.assertIn(str(spec.resolve()), result["scope_markdown"])
+            current = select_scope(spec, "R1", ["R1-T1"], output_format="json")
+            self.assertTrue(current["execution"]["available"])
+            self.assertNotEqual(
+                result["document_sha256"], current["document_sha256"]
             )
 
-    def test_selected_test_file_participates_in_baseline_scope(self) -> None:
-        selection = select_tasks(self.manifest, ["R1"], ["R1-T1"])
-        files = _scope_files_for_repo(self.manifest, selection, "R1")
-        self.assertEqual(
-            files,
-            ["scripts/inspect_dev_spec.py", "tests/test_inspect_dev_spec.py"],
-        )
-        with tempfile.TemporaryDirectory() as temp:
-            repo, baseline = create_repo(Path(temp), "baseline-repo")
-            (repo / "tests" / "test_inspect_dev_spec.py").write_text(
-                "# changed tests\n", encoding="utf-8"
-            )
-            git(repo, "add", "tests/test_inspect_dev_spec.py")
-            git(repo, "commit", "-q", "-m", "test scope change")
-            self.assertEqual(
-                classify_baseline(repo, baseline, files),
-                "scope-drifted",
-            )
-
-    def test_baseline_detects_selected_worktree_changes(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            repo, baseline = create_repo(Path(temp), "dirty-scope-repo")
-            selected = ["scripts/inspect_dev_spec.py"]
-            (repo / "unrelated.txt").write_text("untracked but unrelated\n", encoding="utf-8")
-            self.assertEqual(classify_baseline(repo, baseline, selected), "exact")
-
-            (repo / selected[0]).write_text("# unstaged\n", encoding="utf-8")
-            self.assertEqual(classify_baseline(repo, baseline, selected), "scope-drifted")
-
-            git(repo, "add", selected[0])
-            self.assertEqual(classify_baseline(repo, baseline, selected), "scope-drifted")
-
-    def test_baseline_detects_selected_untracked_file(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            repo, baseline = create_repo(Path(temp), "untracked-scope-repo")
-            planned = "new/module.py"
-            (repo / "new").mkdir()
-            (repo / planned).write_text("# already exists\n", encoding="utf-8")
-            self.assertEqual(
-                classify_baseline(repo, baseline, [planned]),
-                "scope-drifted",
-            )
-
-    def test_baseline_treats_git_magic_pathspec_as_literal(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            repo, baseline = create_repo(Path(temp), "literal-pathspec-repo")
-            (repo / ":(exclude)*").write_text("changed\n", encoding="utf-8")
-            git(repo, "add", ".")
-            git(repo, "commit", "-q", "-m", "add pathspec-like file")
-            self.assertEqual(
-                classify_baseline(repo, baseline, [":(exclude)*"]),
-                "scope-drifted",
-            )
-
-    def test_diverged_history_is_scope_drifted_even_when_file_matches(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            repo, common = create_repo(Path(temp), "diverged-repo")
-            git(repo, "checkout", "-q", "-b", "baseline-side")
-            (repo / "baseline-only.txt").write_text("baseline\n", encoding="utf-8")
-            git(repo, "add", "baseline-only.txt")
-            git(repo, "commit", "-q", "-m", "baseline side")
-            baseline = git(repo, "rev-parse", "HEAD").stdout.strip()
-
-            git(repo, "checkout", "-q", "-b", "current-side", common)
-            (repo / "current-only.txt").write_text("current\n", encoding="utf-8")
-            git(repo, "add", "current-only.txt")
-            git(repo, "commit", "-q", "-m", "current side")
-            self.assertEqual(
-                classify_baseline(repo, baseline, ["scripts/inspect_dev_spec.py"]),
-                "scope-drifted",
-            )
-
-    def test_inspect_cross_repository_selection(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            parent = Path(temp)
-            repo1, baseline1 = create_repo(
-                parent, "easy-coding", "git@github.com:example/easy-coding.git"
-            )
-            repo2, baseline2 = create_repo(
-                parent,
-                "downstream-service",
-                "https://github.com/example/downstream-service.git",
-            )
-            spec = parent / "spec.md"
-            spec.write_text(
-                self.valid_text.replace("0" * 40, baseline1, 1).replace("1" * 40, baseline2, 1),
-                encoding="utf-8",
-            )
+    def test_cross_repo_scope_is_sorted_and_composite_digest_is_canonical(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            spec, r1, r2 = self._environment(Path(directory), include_r2=True)
+            assert r2 is not None
             result = inspect_spec(
                 spec,
-                repo1,
-                ["R2-T1"],
-                [f"R2={repo2}"],
+                r1,
+                ["R2-T1", "R1-T1"],
+                [f"R2={r2}"],
             )
-            self.assertEqual(result["selected_tasks"][0]["task_id"], "R2-T1")
-            self.assertEqual(result["baseline_status"], {"R2": "exact"})
-            self.assertEqual(result["repositories"][0]["head"], baseline2)
+            child_r1 = select_scope(spec, "R1", ["R1-T1"], output_format="json")
+            child_r2 = select_scope(spec, "R2", ["R2-T1"], output_format="json")
+            expected = sha256_json(
+                {
+                    "R1": child_r1["design_scope_sha256"],
+                    "R2": child_r2["design_scope_sha256"],
+                }
+            )
+            self.assertEqual(expected, result["design_scope_sha256"])
+            self.assertEqual(["R1", "R2"], [repo["repo_id"] for repo in result["repositories"]])
             self.assertEqual(
-                result["source_sha256"],
-                hashlib.sha256(spec.read_bytes()).hexdigest(),
+                ["R1-T1", "R2-T1"], [task["task_id"] for task in result["selected_tasks"]]
             )
-            self.assertNotIn("scripts/inspect_dev_spec.py", result["scope_markdown"])
+            self.assertLess(
+                result["scope_markdown"].index("## Repository `R1`"),
+                result["scope_markdown"].index("## Repository `R2`"),
+            )
 
-    def test_manifest_only_lists_tasks_without_loading_scope(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            parent = Path(temp)
-            repo, baseline = create_repo(
-                parent, "easy-coding", "git@github.com:example/easy-coding.git"
-            )
-            spec = parent / "spec.md"
-            spec.write_text(
-                self.valid_text.replace("0" * 40, baseline, 1), encoding="utf-8"
-            )
-            result = inspect_manifest(spec, repo)
-            self.assertTrue(result["selection_required"])
-            self.assertEqual(result["repository_match"]["repo_id"], "R1")
-            self.assertEqual(result["task_catalog"][0]["task_id"], "R1-T1")
-            self.assertEqual(
-                result["task_catalog"][0]["key_deliverables"],
-                ["scripts/inspect_dev_spec.py"],
-            )
-            self.assertEqual(result["task_catalog"][0]["baseline_status"], "exact")
-            self.assertEqual(
-                result["task_catalog"][2]["baseline_status"], "repo-unresolved"
-            )
-            self.assertEqual(result["scope_markdown"], "")
-            self.assertNotIn("下游契约消费者", json.dumps(result, ensure_ascii=False))
+    def test_cross_repo_digest_is_independent_of_task_argument_order(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            spec, r1, r2 = self._environment(Path(directory), include_r2=True)
+            assert r2 is not None
+            first = inspect_spec(spec, r1, ["R1-T1", "R2-T1"], [f"R2={r2}"])
+            second = inspect_spec(spec, r1, ["R2-T1", "R1-T1"], [f"R2={r2}"])
+            self.assertEqual(first["design_scope_sha256"], second["design_scope_sha256"])
+            self.assertEqual(first["execution_scope_sha256"], second["execution_scope_sha256"])
+            self.assertEqual(first["scope_markdown"], second["scope_markdown"])
 
-    def test_manifest_only_repo_path_must_confirm_current_repository(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            parent = Path(temp)
-            repo1, _ = create_repo(
-                parent, "easy-coding", "git@github.com:example/easy-coding.git"
-            )
-            repo2, _ = create_repo(
-                parent,
-                "downstream-service",
-                "https://github.com/example/downstream-service.git",
-            )
-            spec = parent / "spec.md"
-            spec.write_text(self.valid_text, encoding="utf-8")
-            with self.assertRaisesRegex(SelectionError, "confirm the current repository"):
-                inspect_manifest(spec, repo1, [f"R2={repo2}"])
+    def test_explicit_cross_repo_task_requires_confirmed_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            spec, r1, _ = self._environment(Path(directory))
+            with self.assertRaisesRegex(SelectionError, "unresolved repository paths"):
+                inspect_spec(spec, r1, ["R2-T1"], [])
 
-    def test_cli_manifest_only_rejects_task_arguments(self) -> None:
-        completed = subprocess.run(
-            [
-                "python3",
-                str(SCRIPT),
-                str(VALID_FIXTURE),
-                "--repo-root",
-                str(ROOT),
-                "--manifest-only",
-                "--task",
+    def test_execution_dependency_gates_have_distinct_blocking_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            spec, r1, _ = self._environment(Path(directory))
+            digest = design_sha256(spec.read_text(encoding="utf-8"))
+            initialize_execution(spec, expected_design_sha256=digest)
+            result = inspect_spec(spec, r1, ["R1-T2"], [])
+            by_type = {item["type"]: item for item in result["dependency_summary"]}
+            self.assertEqual("pending", by_type["hard"]["status"])
+            self.assertTrue(by_type["hard"]["blocking_implementation"])
+            self.assertEqual("pending", by_type["integration"]["status"])
+            self.assertFalse(by_type["integration"]["blocking_implementation"])
+            self.assertTrue(by_type["integration"]["blocking_completion"])
+
+            execution = record_dependency_status(
+                spec,
+                "R1-T2",
                 "R1-T1",
-            ],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(completed.returncode, 2)
-        self.assertIn("cannot be combined", json.loads(completed.stdout)["error"])
-
-    def test_cli_ambiguous_repository_lists_candidates(self) -> None:
-        manifest = copy.deepcopy(self.manifest)
-        manifest["repositories"][1]["remote_urls"] = manifest["repositories"][0][
-            "remote_urls"
-        ]
-        with tempfile.TemporaryDirectory() as temp:
-            parent = Path(temp)
-            repo, _ = create_repo(
-                parent, "easy-coding", "git@github.com:example/easy-coding.git"
+                "satisfied",
+                "外部构件证据。",
+                "easy-coding",
+                "Codex with Easy Coding",
+                digest,
+                0,
+                evidence=[{"kind": "artifact", "status": "recorded", "ref": "api@1"}],
+                run_id="run-inspector",
+                idempotency_key="run-inspector:R1-T2:hard",
             )
-            spec = parent / "ambiguous.md"
-            spec.write_text(self._replace_manifest(manifest), encoding="utf-8")
-            completed = subprocess.run(
-                [
-                    "python3",
-                    str(SCRIPT),
-                    str(spec),
-                    "--repo-root",
-                    str(repo),
-                    "--manifest-only",
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
+            refreshed = inspect_spec(spec, r1, ["R1-T2"], [])
+            by_type = {item["type"]: item for item in refreshed["dependency_summary"]}
+            self.assertEqual("satisfied", by_type["hard"]["status"])
+            self.assertEqual(execution["execution_revision"], refreshed["execution"]["execution_revision"])
+            self.assertEqual(result["design_scope_sha256"], refreshed["design_scope_sha256"])
+            self.assertNotEqual(
+                result["execution_scope_sha256"], refreshed["execution_scope_sha256"]
             )
-            confirmed = subprocess.run(
-                [
-                    "python3",
-                    str(SCRIPT),
-                    str(spec),
-                    "--repo-root",
-                    str(repo),
-                    "--manifest-only",
-                    "--repo-path",
-                    f"R1={repo}",
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
+
+    def test_contract_dependency_comes_from_ready_frozen_design(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            spec, r1, r2 = self._environment(Path(directory), include_r2=True)
+            assert r2 is not None
+            initialize_execution(
+                spec, expected_design_sha256=design_sha256(spec.read_text(encoding="utf-8"))
             )
-        self.assertEqual(completed.returncode, 3)
-        payload = json.loads(completed.stdout)
-        self.assertEqual(payload["error_type"], "RepositoryAmbiguityError")
-        self.assertEqual(
-            {candidate["repo_id"] for candidate in payload["candidates"]},
-            {"R1", "R2"},
-        )
-        self.assertEqual(completed.stderr, "")
-        self.assertEqual(confirmed.returncode, 0)
-        confirmed_payload = json.loads(confirmed.stdout)
-        self.assertEqual(confirmed_payload["repository_match"]["method"], "user-confirmed")
-        self.assertTrue(confirmed_payload["task_catalog"])
-        self.assertEqual(confirmed.stderr, "")
+            result = inspect_spec(spec, r2, ["R2-T1"], [])
+            contract = result["dependency_summary"][0]
+            self.assertEqual("contract", contract["type"])
+            self.assertEqual("satisfied", contract["status"])
+            self.assertEqual("design-ready", contract["basis"])
+            self.assertEqual([], result["dependency_gaps"])
 
-    def test_cli_legacy_and_schema_errors(self) -> None:
-        legacy = subprocess.run(
-            [
-                "python3",
-                str(SCRIPT),
-                str(LEGACY_FIXTURE),
-                "--repo-root",
-                str(ROOT),
-            ],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(legacy.returncode, 0)
-        self.assertEqual(json.loads(legacy.stdout)["protocol"], "legacy")
+    def test_default_selection_retains_hard_dependency_waves(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            spec, r1, _ = self._environment(Path(directory))
+            result = inspect_spec(spec, r1, [], [])
+            self.assertEqual(
+                ["R1-T1", "R1-T2"], [task["task_id"] for task in result["selected_tasks"]]
+            )
+            self.assertEqual([["R1-T1"], ["R1-T2"]], result["waves"])
 
-        with tempfile.TemporaryDirectory() as temp:
-            future_path = Path(temp) / "future.md"
-            future_path.write_text(
+    def test_git_baseline_includes_test_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            spec, r1, _ = self._environment(Path(directory))
+            exact = inspect_spec(spec, r1, ["R1-T1"], [])
+            self.assertEqual("exact", exact["baseline_status"]["R1"])
+            test_file = (
+                r1
+                / "order-domain/src/test/java/com/example/order/OrderEventPublisherTest.java"
+            )
+            test_file.write_text("// changed\n", encoding="utf-8")
+            drifted = inspect_spec(spec, r1, ["R1-T1"], [])
+            self.assertEqual("scope-drifted", drifted["baseline_status"]["R1"])
+
+    def test_git_baseline_uses_literal_pathspecs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "literal-repo"
+            repo.mkdir()
+            git(repo, "init", "-q")
+            git(repo, "config", "user.email", "tests@example.com")
+            git(repo, "config", "user.name", "Easy Coding Tests")
+            (repo / "literal[1].txt").write_text("selected\n", encoding="utf-8")
+            (repo / "literal1.txt").write_text("decoy\n", encoding="utf-8")
+            git(repo, "add", ".")
+            git(repo, "commit", "-q", "-m", "initial")
+            baseline = git(repo, "rev-parse", "HEAD").stdout.strip()
+            (repo / "literal1.txt").write_text("decoy changed\n", encoding="utf-8")
+            self.assertEqual("exact", classify_baseline(repo, baseline, ["literal[1].txt"]))
+            (repo / "literal[1].txt").write_text("selected changed\n", encoding="utf-8")
+            self.assertEqual(
+                "scope-drifted", classify_baseline(repo, baseline, ["literal[1].txt"])
+            )
+
+    def test_ambiguous_repository_can_be_recovered_only_with_candidate_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            spec, r1, _ = self._environment(parent)
+            text = spec.read_text(encoding="utf-8")
+            spec.write_text(
+                text.replace(
+                    "https://example.com/demo/notification-service.git",
+                    "git@example.com:demo/order-service.git",
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(RepositoryAmbiguityError):
+                inspect_spec(spec, r1, ["R1-T1"], [])
+            recovered = inspect_spec(spec, r1, ["R1-T1"], [f"R1={r1}"])
+            self.assertEqual("user-confirmed", recovered["repositories"][0]["match"]["method"])
+
+    def test_legacy_is_read_only_compatible_and_future_schema_is_rejected(self) -> None:
+        legacy = inspect_spec(LEGACY_FIXTURE, ROOT, [], [])
+        self.assertEqual("legacy", legacy["protocol"])
+        with tempfile.TemporaryDirectory() as directory:
+            future = Path(directory) / "future.md"
+            future.write_text(
                 self.valid_text.replace("easy-dev-spec/v1", "easy-dev-spec/v2", 1),
                 encoding="utf-8",
             )
-            future = subprocess.run(
+            with self.assertRaises(CanonicalSpecError):
+                inspect_spec(future, ROOT, [], [])
+
+    def test_single_line_legacy_content_is_not_reinterpreted_as_a_path(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            spec = Path(directory) / "single-line.md"
+            spec.write_text("README.md", encoding="utf-8")
+            result = inspect_spec(spec, ROOT, [], [])
+            self.assertEqual("legacy", result["protocol"])
+            self.assertEqual(
+                hashlib.sha256(b"README.md").hexdigest(),
+                result["document_sha256"],
+            )
+
+    def test_cli_accepts_relative_external_locator_and_preserves_exit_codes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            spec, r1, _ = self._environment(parent)
+            success = subprocess.run(
                 [
                     "python3",
+                    "-B",
                     str(SCRIPT),
-                    str(future_path),
+                    spec.name,
                     "--repo-root",
-                    str(ROOT),
+                    str(r1),
+                    "--task",
+                    "R1-T1",
                 ],
-                check=False,
+                cwd=parent,
                 capture_output=True,
                 text=True,
             )
-            self.assertEqual(future.returncode, 2)
-            self.assertEqual(json.loads(future.stdout)["protocol"], "error")
+            self.assertEqual(0, success.returncode, success.stderr or success.stdout)
+            payload = json.loads(success.stdout)
+            self.assertEqual(str(spec.resolve()), payload["source_path"])
 
-    def test_cli_argument_error_is_a_single_json_object(self) -> None:
-        completed = subprocess.run(
-            ["python3", str(SCRIPT)],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-        self.assertEqual(completed.returncode, 2)
-        payload = json.loads(completed.stdout)
-        self.assertEqual(payload["protocol"], "error")
-        self.assertEqual(payload["error_type"], "ArgumentError")
-        self.assertEqual(completed.stderr, "")
-
-    def test_cli_invalid_reference_type_returns_two(self) -> None:
-        manifest = copy.deepcopy(self.manifest)
-        manifest["contracts"][0]["consumer_task_ids"] = [{}]
-        with tempfile.TemporaryDirectory() as temp:
-            spec = Path(temp) / "invalid-reference.md"
-            spec.write_text(self._replace_manifest(manifest), encoding="utf-8")
-            completed = subprocess.run(
+            selection_error = subprocess.run(
                 [
                     "python3",
+                    "-B",
                     str(SCRIPT),
-                    str(spec),
+                    spec.name,
                     "--repo-root",
-                    str(ROOT),
+                    str(r1),
+                    "--task",
+                    "R9-T9",
                 ],
-                check=False,
+                cwd=parent,
                 capture_output=True,
                 text=True,
             )
-        self.assertEqual(completed.returncode, 2)
-        self.assertEqual(json.loads(completed.stdout)["error_type"], "CanonicalSpecError")
-        self.assertEqual(completed.stderr, "")
-
-    def test_cli_repository_mismatch_returns_three(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            parent = Path(temp)
-            repo, baseline = create_repo(
-                parent, "easy-coding", "git@github.com:someone/other.git"
-            )
-            spec = parent / "spec.md"
-            spec.write_text(
-                self.valid_text.replace("0" * 40, baseline, 1), encoding="utf-8"
-            )
-            completed = subprocess.run(
+            self.assertEqual(3, selection_error.returncode)
+            protocol_error = subprocess.run(
                 [
                     "python3",
+                    "-B",
                     str(SCRIPT),
-                    str(spec),
+                    "missing.md",
                     "--repo-root",
-                    str(repo),
+                    str(r1),
                 ],
-                check=False,
+                cwd=parent,
                 capture_output=True,
                 text=True,
             )
-            self.assertEqual(completed.returncode, 3)
-            self.assertEqual(json.loads(completed.stdout)["error_type"], "SelectionError")
-
-    def _replace_manifest(self, manifest: dict[str, object]) -> str:
-        start = self.valid_text.index("```json") + len("```json")
-        end = self.valid_text.index("```", start)
-        return (
-            self.valid_text[:start]
-            + "\n"
-            + json.dumps(manifest, ensure_ascii=False, indent=2)
-            + "\n"
-            + self.valid_text[end:]
-        )
+            self.assertEqual(2, protocol_error.returncode)
 
 
 if __name__ == "__main__":

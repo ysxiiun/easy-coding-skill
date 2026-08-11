@@ -38,15 +38,15 @@
 5. `.easy-coding/spec/UI-Spec.md`
 6. `.easy-coding/prototype/Easy-UI-Prototype.md`
 7. `.easy-coding/prototype/` 下的 HTML 文件、assets 和 images
-8. 扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件（仅扫描文件名，不自动读取正文）
-9. 用户显式引用的具体 Dev-Spec 路径（直接作为候选，不做二次编号选择）
+8. 用户显式引用的具体 Dev-Spec 路径（作为唯一候选，解析绝对 locator，不扫描或复制到候选目录）
+9. 仅在用户未给具体路径时，扫描 `.easy-coding/spec/dev/` 下的 Markdown 候选文件（仅扫描文件名，不自动读取正文）
 
 读取规则：
 
 - 存在则读取，不存在则跳过
 - 能从代码、配置、Spec、Prototype 推断的信息不要反问用户
 - 若关键信息会影响数据模型、接口、页面结构、核心交互或技术路线，不能脑补，必须停下来确认
-- 若发现 Dev-Spec 候选文件，先按相对路径字典序输出完整编号清单；用户可回复 `1,3`、`1-3`、`全部/all` 或 `不加载/none`。原生选择工具可用时仍必须调用工具承接 `全部加载`、`不加载`、`暂不选择/保持等待` 等真实分支，部分加载和多选通过客户端 free-form Other 输入编号；用户未选择前不读取正文
+- 用户未给具体路径且发现 Dev-Spec 候选文件时，先按相对路径字典序输出完整编号清单；用户可回复 `1,3`、`1-3`、`全部/all` 或 `不加载/none`。原生选择工具可用时仍必须调用工具承接 `全部加载`、`不加载`、`暂不选择/保持等待` 等真实分支，部分加载和多选通过客户端 free-form Other 输入编号；用户未选择前不读取正文
 - 用户选中后先调用已加载 Easy Coding Skill 根目录下的 `scripts/inspect_dev_spec.py --manifest-only` 探测协议，不得从业务仓库 cwd 猜测脚本路径：legacy 才读取全文；Canonical v1 先选择 task，再运行完整检查并只加载返回的 `scope_markdown`
 
 ## 自动进入分析
@@ -88,7 +88,7 @@
 1. 识别本次任务是否涉及前端开发
 2. 识别本次实际使用了哪些 Spec / Prototype 输入
 3. 若已扫描到 Dev-Spec 候选但未选择，先输出完整编号清单，并优先用原生选择框等待用户选择是否加载；部分加载通过 free-form Other 输入编号
-4. 若已选择 Dev-Spec，先区分 legacy 与 Canonical v1；Canonical v1 调用检查脚本选择 repo/task，加载消费闭包并记录 `source_sha256` 和 `scope_sha256`
+4. 若已选择 Dev-Spec，先区分 legacy 与 Canonical v1；Canonical v1 调用检查脚本选择 repo/task，加载消费闭包并记录绝对 locator、`design_sha256 / design_scope_sha256 / execution_revision / execution_scope_sha256`；`source_sha256` 只作诊断
 5. 判断用户提示词与 Spec / Dev-Spec 是否冲突
 6. 若用户没有额外描述需求，默认以 Spec / Prototype / 已选 Dev-Spec 或 Canonical task 作为需求来源
 7. 若涉及前端：
@@ -112,6 +112,7 @@
 
 **若命中 Canonical Spec：**
 - READY、仓库匹配、baseline 可复用且无 hard 缺口时，使用 `SKILL.md` 的 Canonical 快速路径，不重复设计已冻结的契约和 task 边界
+- hard/contract/integration 必须按共享 execution 投影判断；无 execution 时只读兼容，若方案进入开发必须明确初始化并回写原 Spec
 - 漂移时读取实际文件和符号，输出 Spec 修订项；baseline 不可用或仓库不匹配时停止实施
 - 当前仓库上下文不得包含未选仓库 task 的文件、符号、调用链和实施步骤
 
@@ -153,15 +154,16 @@
    - 不得直接复制 Prototype HTML、转贴 Prototype 图片或保留整页 mock 数据作为最终实现
 3. 若用户在实施中变更需求，必须回到 WAITING_CONFIRM
 4. 联合模式下，IMPLEMENT 期间不调用 Claude；第一版实现完成后先进入 REVIEW，再输出实施结果报告
-5. Canonical task 必须按 `task_id / step_id / change_id / test_id` 执行和汇报；越过 path、symbol 或 task 边界时回到 ANALYSIS 重新确认
+5. Canonical task 必须按 `task_id / step_id / change_id / test_id` 执行和汇报，并按 writer 顺序写入原 Spec：`show/init → in_progress → Step completed/failed → implemented → verified`；越过 path、symbol 或 task 边界时停止 Step，回到 ANALYSIS 重新确认并按 revision +1 / `sync-design` 修订
 
 ### 5. 初始化资产回补
 
 当第一版开发完成、联合模式 REVIEW 已结束（如适用）、且用户确认实现结果后，必须自动执行：
 
-1. 读取 `flow/init.md`
-2. 以 `post_v1_auto_init` 语义回补 `.easy-coding/` 资产
-3. 生成或更新：
+1. Canonical task 先刷新 execution；integration 已满足时写 `completed`，未满足时保留 `verified` 并明确 task 尚未完成
+2. 读取 `flow/init.md`
+3. 以 `post_v1_auto_init` 语义回补 `.easy-coding/` 资产
+4. 生成或更新：
    - `.easy-coding/SOUL.md`
    - `.easy-coding/RULES.md`
    - `.easy-coding/ABSTRACT.md`
@@ -169,9 +171,9 @@
    - `.easy-coding/memory/long/MEMORY.md`
    - `.easy-coding/memory/long/BUSINESS.md`
    - `.easy-coding/memory/long/TECHNICAL.md`
-4. 不覆盖已有 Spec、Prototype 和已确认代码成果
-5. 回补长期记忆三文件只代表初始化资产可用，不代表本轮任务已沉淀长期记忆
-6. 联合模式下，回补过程按 `flow/with-claude.md` 的 INIT 协作规则执行：Claude 只读草拟，host agent 合并和写入
+5. 不覆盖已有 Spec、Prototype 和已确认代码成果
+6. 回补长期记忆三文件只代表初始化资产可用，不代表本轮任务已沉淀长期记忆
+7. 联合模式下，回补过程按 `flow/with-claude.md` 的 INIT 协作规则执行：Claude 只读草拟，host agent 合并和写入
 
 ### 6. MEMORY → COMPLETE
 
@@ -233,6 +235,8 @@
 4. 短期记忆生成完成
 5. 长期记忆检查完成
 6. 输出 COMPLETE
+
+Canonical task 因 integration 未闭合而保持 `verified` 时，可以完成 Easy Coding 的资产回补与记忆流程，但 `COMPLETE` 报告必须明确区分“Easy Coding 流程结束”和“Canonical task 尚未 completed”。
 
 若处于 Easy Coding With Claude 联合模式，第一版开发还必须完成 Claude 只读 REVIEW。
 
