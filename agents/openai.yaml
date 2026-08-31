@@ -1,8 +1,8 @@
 interface:
   display_name: "Easy Coding"
-  short_description: "仅显式调用的六阶段编程助手，支持 Canonical Spec 共享执行、项目记忆和 With Claude"
+  short_description: "固定 Guard + Standard 的轻量单 Skill，共享项目知识、记忆与 Canonical"
   default_prompt: >-
-    使用 `$easy-coding` 按六阶段流程处理编程需求，并通过设计摘要与受控 writer 读取、共享和回写 Canonical Spec execution；保留 Legacy、确认门禁、记忆及 With Claude 只读 REVIEW。
+    使用 `$easy-coding` 按固定 Guard 审批语义和 Standard QUALITY 双门处理编程需求；不依赖 Harness 运行时，通过共享知识、记忆、单一 Canonical 消费闭包和受控 writer 原地协作。
 
 policy:
   allow_implicit_invocation: false

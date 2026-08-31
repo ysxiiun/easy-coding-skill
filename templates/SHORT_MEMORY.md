@@ -1,6 +1,9 @@
 ---
 memory_schema: 2
 id: {memory_id}
+source_task: ec-skill-{UUIDv7}
+workflow_mode: standard
+producer: easy-coding-skill
 date: YYYY-MM-DD
 task_type: feature | bugfix | refactor | perf | frontend | doc | workflow
 project_mode: startup | iteration
@@ -37,9 +40,14 @@ target_long: BUSINESS | TECHNICAL | BOTH | NONE
 
 | 类型 | 内容 |
 |---|---|
+| 候选指纹 | {candidate_sha256} |
+| Reviewer 来源 | {independent:<mechanism> / host-fallback:<reason>} |
+| 发现与修复 | {分类、Repair Bundle 与结果；无则写“无”} |
 | 关键文件 | {文件或模块列表；无则写“无”} |
 | 验证命令 | {测试 / 构建 / 静态检查命令与结果；未执行说明原因} |
-| 人工验收 | {已检查的关键行为；无则写“无”} |
+| 用户确认 | {QUALITY 结果确认及时间/轮次} |
+| 剩余风险 | {suggestion、环境边界或“无”} |
+| Canonical | {task/Step/integration 状态；不适用写“无”} |
 | 提交信息 | {commit hash；未提交写“none”} |
 
 ## 业务记忆候选

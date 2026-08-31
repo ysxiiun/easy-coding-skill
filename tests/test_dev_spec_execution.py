@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import subprocess
 import tempfile
@@ -38,8 +39,8 @@ from scripts.easy_dev_spec_protocol import (
 FIXTURES = Path(__file__).parent / "fixtures"
 VALID = FIXTURES / "easy-dev-spec-v1-final.md"
 LEGACY = FIXTURES / "legacy-dev-spec.md"
-APP = "easy-coding"
-AGENT = "Codex with Easy Coding"
+APP = "easy-coding-skill"
+AGENT = "codex"
 WRITER_CLI = Path(__file__).parents[1] / "scripts" / "update_dev_spec_execution.py"
 
 
@@ -83,6 +84,8 @@ class DevSpecExecutionTest(unittest.TestCase):
                 idempotency_key="run-external:R1-T1:start",
             )
             self.assertEqual(1, updated["execution_revision"])
+            self.assertEqual(APP, updated["events"][-1]["app"])
+            self.assertEqual(AGENT, updated["events"][-1]["agent"])
             shown = show_execution(spec)
             self.assertEqual("order-notification-2026", shown["spec_id"])
             self.assertTrue(shown["execution"]["tasks"])
@@ -162,6 +165,107 @@ class DevSpecExecutionTest(unittest.TestCase):
                     run_id="run-cas",
                     idempotency_key="run-cas:R1-T1:start",
                 )
+
+    def test_quality_repair_round_uses_new_idempotency_namespace(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            spec = self._copy_spec(directory)
+            digest = design_sha256(spec.read_text(encoding="utf-8"))
+            execution = initialize_execution(spec, expected_design_sha256=digest)
+            run_id = "ec-skill-repair-round"
+
+            execution = record_task_status(
+                spec,
+                "R1-T1",
+                "in_progress",
+                "第一轮开始。",
+                APP,
+                AGENT,
+                digest,
+                execution["execution_revision"],
+                run_id=run_id,
+                idempotency_key=f"{run_id}:round:1:task:R1-T1:in_progress",
+            )
+            execution = record_step_status(
+                spec,
+                "R1-T1",
+                "S1",
+                "completed",
+                "第一轮质量证据。",
+                APP,
+                AGENT,
+                digest,
+                execution["execution_revision"],
+                evidence=_passed("T1", "candidate-one"),
+                run_id=run_id,
+                idempotency_key=f"{run_id}:round:1:step:S1:completed",
+            )
+            execution = record_task_status(
+                spec,
+                "R1-T1",
+                "implemented",
+                "第一轮 Guard 候选。",
+                APP,
+                AGENT,
+                digest,
+                execution["execution_revision"],
+                run_id=run_id,
+                idempotency_key=f"{run_id}:round:1:task:R1-T1:implemented",
+            )
+
+            execution = record_task_status(
+                spec,
+                "R1-T1",
+                "blocked",
+                "用户反馈候选缺陷。",
+                APP,
+                AGENT,
+                digest,
+                execution["execution_revision"],
+                run_id=run_id,
+                idempotency_key=f"{run_id}:round:1:task:R1-T1:blocked",
+            )
+            execution = record_task_status(
+                spec,
+                "R1-T1",
+                "in_progress",
+                "第二轮 Repair Bundle 开始。",
+                APP,
+                AGENT,
+                digest,
+                execution["execution_revision"],
+                run_id=run_id,
+                idempotency_key=f"{run_id}:round:2:task:R1-T1:in_progress",
+            )
+            execution = record_step_status(
+                spec,
+                "R1-T1",
+                "S1",
+                "completed",
+                "第二轮质量证据。",
+                APP,
+                AGENT,
+                digest,
+                execution["execution_revision"],
+                evidence=_passed("T1", "candidate-two"),
+                run_id=run_id,
+                idempotency_key=f"{run_id}:round:2:step:S1:completed",
+            )
+            execution = record_task_status(
+                spec,
+                "R1-T1",
+                "implemented",
+                "第二轮 Guard 候选。",
+                APP,
+                AGENT,
+                digest,
+                execution["execution_revision"],
+                run_id=run_id,
+                idempotency_key=f"{run_id}:round:2:task:R1-T1:implemented",
+            )
+
+            snapshot = _execution_task(execution, "R1-T1")
+            self.assertEqual("implemented", snapshot["status"])
+            self.assertEqual("candidate-two", snapshot["evidence"][-1]["ref"])
 
     def test_hard_contract_and_integration_gates(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -616,6 +720,19 @@ class CanonicalProtocolRegressionTest(unittest.TestCase):
             "18b74fbca1a86a5db223580753a7ed06b219200b8a630ddca817ffb275cb3024",
             UPSTREAM_SOURCE_SHA256["scripts/update_dev_spec_execution.py"],
         )
+        protocol_source = (
+            Path(__file__).parents[1] / "scripts" / "easy_dev_spec_protocol.py"
+        ).read_text(encoding="utf-8")
+        provenance_start = protocol_source.index("UPSTREAM_PROTOCOL_COMMIT =")
+        provenance_end = protocol_source.index("\n\nSCHEMA =", provenance_start)
+        upstream_payload = (
+            protocol_source[:provenance_start]
+            + protocol_source[provenance_end + 2 :]
+        )
+        self.assertEqual(
+            UPSTREAM_PROTOCOL_SHA256,
+            hashlib.sha256(upstream_payload.encode("utf-8")).hexdigest(),
+        )
 
     def test_duplicate_manifest_is_rejected(self) -> None:
         text = VALID.read_text(encoding="utf-8")
@@ -937,29 +1054,25 @@ class CanonicalProtocolRegressionTest(unittest.TestCase):
             self.assertEqual(0o640, spec.stat().st_mode & 0o777)
             self.assertFalse(spec.with_name(f".{spec.name}.eds.lock").exists())
 
-    def test_with_claude_packets_use_new_digest_branches(self) -> None:
+    def test_canonical_quality_timing_and_candidate_evidence_are_documented(self) -> None:
         root = Path(__file__).parents[1]
-        template = (root / "templates" / "CLAUDE_TASK_PACKET.md").read_text(
+        canonical = (root / "references" / "dev-spec" / "canonical-v1.md").read_text(
             encoding="utf-8"
         )
-        flow = (root / "flow" / "with-claude.md").read_text(encoding="utf-8")
-        scenarios = (
-            root / "references" / "scenarios" / "easy-coding-with-claude.md"
-        ).read_text(encoding="utf-8")
-        for field in (
-            '"design_digest"',
-            '"design_scope_digest"',
-            '"execution_revision"',
-            '"execution_scope_digest"',
-        ):
-            self.assertIn(field, template)
-        self.assertNotIn('"scope_digest"', template)
-        self.assertIn("只有 `execution_revision / execution_scope_sha256` 变化", flow)
-        self.assertIn("设计或设计范围摘要变化", flow)
-        self.assertIn("Canonical 仅执行态变化", scenarios)
-        self.assertIn("继续使用当前只读结果", scenarios)
-        self.assertIn("Canonical 设计变化", scenarios)
-        self.assertIn("丢弃旧 worker 结果并返回 `[阶段：ANALYSIS]`", scenarios)
+        quality = (root / "flow" / "quality.md").read_text(encoding="utf-8")
+        step_completed = canonical.index("把 Step 写 `completed`")
+        task_implemented = canonical.index("task 写 `implemented`", step_completed)
+        user_confirmation = canonical.index("用户确认后 task 写 `verified`", task_implemented)
+        memory_completed = canonical.index("MEMORY 检查点", user_confirmation)
+        self.assertLess(step_completed, task_implemented)
+        self.assertLess(task_implemented, user_confirmation)
+        self.assertLess(user_confirmation, memory_completed)
+        self.assertIn("candidate_sha256", canonical)
+        self.assertIn("Test 的 passed 证据", canonical)
+        self.assertIn("integration 未满足时保持 QUALITY/`implemented`", canonical)
+        self.assertIn("受控写回不进入业务 `candidate_sha256`", canonical)
+        self.assertIn("repo 内 Canonical locator 作为对应 repo 的机器", quality)
+        self.assertIn("repo 外 locator 不传 `--ignore`", quality)
 
 
 if __name__ == "__main__":

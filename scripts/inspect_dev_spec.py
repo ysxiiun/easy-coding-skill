@@ -59,6 +59,7 @@ class RepositoryMatch:
     repo_root: str
     method: str
     normalized_remote: str | None = None
+    path_hint_status: str = "missing"
 
 
 def _require_list(manifest: dict[str, Any], key: str) -> list[dict[str, Any]]:
@@ -193,6 +194,17 @@ def _repository_candidate_metadata(
     ]
 
 
+def _path_hint_status(repository: dict[str, Any], repo_root: Path) -> str:
+    """Compare an advisory path hint with the resolved runtime worktree."""
+
+    raw_hint = str(repository.get("path_hint") or "").strip()
+    if not raw_hint:
+        return "missing"
+    hint = Path(raw_hint).expanduser()
+    resolved_hint = (hint if hint.is_absolute() else repo_root / hint).resolve()
+    return "matched" if resolved_hint == repo_root.resolve() else "different"
+
+
 def match_repository(manifest: dict[str, Any], repo_root: Path) -> RepositoryMatch:
     """Match a local Git repository to exactly one manifest repository."""
 
@@ -219,6 +231,7 @@ def match_repository(manifest: dict[str, Any], repo_root: Path) -> RepositoryMat
                 repo_root=str(root),
                 method="remote",
                 normalized_remote=matched_remote,
+                path_hint_status=_path_hint_status(repository, root),
             )
         if len(matches) > 1:
             ids = ", ".join(repository["repo_id"] for repository, _ in matches)
@@ -236,6 +249,7 @@ def match_repository(manifest: dict[str, Any], repo_root: Path) -> RepositoryMat
             name=repository["name"],
             repo_root=str(root),
             method="basename",
+            path_hint_status=_path_hint_status(repository, root),
         )
     if len(basename_matches) > 1:
         ids = ", ".join(repository["repo_id"] for repository in basename_matches)
@@ -257,11 +271,13 @@ def _confirmed_repository_match(
     if repo_id not in repository_by_id:
         raise SelectionError(f"unknown repo_id: {repo_id}")
     repository = repository_by_id[repo_id]
+    resolved_root = _repository_root(repo_root)
     return RepositoryMatch(
         repo_id=repo_id,
         name=repository["name"],
-        repo_root=str(_repository_root(repo_root)),
+        repo_root=str(resolved_root),
         method="user-confirmed",
+        path_hint_status=_path_hint_status(repository, resolved_root),
     )
 
 
@@ -466,6 +482,8 @@ def _select_scopes(
     spec_text: str,
     spec_path: Path,
     grouped_task_ids: dict[str, list[str]],
+    *,
+    include_markdown: bool = True,
 ) -> tuple[dict[str, dict[str, Any]], str, str, str]:
     scopes: dict[str, dict[str, Any]] = {}
     markdown_scopes: dict[str, str] = {}
@@ -477,35 +495,38 @@ def _select_scopes(
             output_format="json",
         )
         scopes[repo_id]["source_path"] = str(spec_path)
-        markdown_scope = select_scope(
-            spec_text,
-            repo_id,
-            grouped_task_ids[repo_id],
-            output_format="markdown",
-        )
-        source_marker = '  "source_path": null,'
-        if markdown_scope.count(source_marker) != 1:
-            raise CanonicalSpecError("上游消费闭包缺少唯一 source_path locator")
-        markdown_scopes[repo_id] = markdown_scope.replace(
-            source_marker,
-            f'  "source_path": {json.dumps(str(spec_path), ensure_ascii=False)},',
-            1,
-        )
+        if include_markdown:
+            markdown_scope = select_scope(
+                spec_text,
+                repo_id,
+                grouped_task_ids[repo_id],
+                output_format="markdown",
+            )
+            source_marker = '  "source_path": null,'
+            if markdown_scope.count(source_marker) != 1:
+                raise CanonicalSpecError("上游消费闭包缺少唯一 source_path locator")
+            markdown_scopes[repo_id] = markdown_scope.replace(
+                source_marker,
+                f'  "source_path": {json.dumps(str(spec_path), ensure_ascii=False)},',
+                1,
+            )
     if len(scopes) == 1:
         repo_id = next(iter(scopes))
         return (
             scopes,
-            markdown_scopes[repo_id],
+            markdown_scopes.get(repo_id, ""),
             scopes[repo_id]["design_scope_sha256"],
             scopes[repo_id]["execution_scope_sha256"],
         )
-    scope_markdown = "\n\n".join(
-        ["# Canonical Spec Composite Consumption Scope"]
-        + [
-            f"## Repository `{repo_id}`\n\n{markdown_scopes[repo_id].rstrip()}"
-            for repo_id in sorted(markdown_scopes)
-        ]
-    ).rstrip() + "\n"
+    scope_markdown = ""
+    if include_markdown:
+        scope_markdown = "\n\n".join(
+            ["# Canonical Spec Composite Consumption Scope"]
+            + [
+                f"## Repository `{repo_id}`\n\n{markdown_scopes[repo_id].rstrip()}"
+                for repo_id in sorted(markdown_scopes)
+            ]
+        ).rstrip() + "\n"
     design_scope_digest = _sha256_json(
         {repo_id: scopes[repo_id]["design_scope_sha256"] for repo_id in sorted(scopes)}
     )
@@ -541,7 +562,9 @@ def _execution_status_by_task(execution: dict[str, Any] | None) -> dict[str, str
     }
 
 
-def _full_execution_projection(report: Any) -> dict[str, Any]:
+def _full_execution_projection(
+    report: Any, relevant_task_ids: set[str] | None = None
+) -> dict[str, Any]:
     execution = report.execution
     if execution is None:
         return {
@@ -552,19 +575,29 @@ def _full_execution_projection(report: Any) -> dict[str, Any]:
             "tasks": [],
             "dependency_status": [],
         }
+    snapshots = sorted(execution.get("tasks", []), key=lambda item: item["task_id"])
+    if relevant_task_ids is not None:
+        snapshots = [
+            snapshot
+            for snapshot in snapshots
+            if snapshot.get("task_id") in relevant_task_ids
+        ]
     return {
         "schema": execution.get("schema", "easy-dev-spec-execution/v1"),
         "available": True,
         "execution_revision": execution.get("execution_revision"),
         "updated_at": execution.get("updated_at"),
-        "tasks": sorted(execution.get("tasks", []), key=lambda item: item["task_id"]),
+        "tasks": snapshots,
         "dependency_status": [],
     }
 
 
-def _legacy_result(spec_path: Path, report: Any) -> dict[str, Any]:
+def _legacy_result(
+    spec_path: Path, report: Any, inspection_mode: str = "selected"
+) -> dict[str, Any]:
     source_digest = report.document_sha256
     return {
+        "inspection_mode": inspection_mode,
         "protocol": "legacy",
         "source_path": str(spec_path),
         "spec_id": None,
@@ -581,6 +614,7 @@ def _legacy_result(spec_path: Path, report: Any) -> dict[str, Any]:
         "dependency_gaps": [],
         "baseline_status": {},
         "scope_markdown": "",
+        "repository_match": None,
     }
 
 
@@ -596,7 +630,7 @@ def inspect_manifest(
     report = _validate_snapshot(spec_text)
     if report.protocol == "legacy":
         return {
-            **_legacy_result(resolved_spec, report),
+            **_legacy_result(resolved_spec, report, "manifest-only"),
             "selection_required": False,
             "task_catalog": [],
         }
@@ -616,28 +650,21 @@ def inspect_manifest(
             )
         _paths_for_selection(manifest, repository_match, provided_repo_paths)
 
-    change_by_id = _index_unique(_require_list(manifest, "changes"), "change_id", "changes")
-    test_by_id = _index_unique(_require_list(manifest, "tests"), "test_id", "tests")
-    repository_by_id = _index_unique(
-        _require_list(manifest, "repositories"), "repo_id", "repositories"
-    )
     execution_status = _execution_status_by_task(report.execution)
+    current_tasks = [
+        task
+        for task in _require_list(manifest, "tasks")
+        if task.get("repo_id") == repository_match.repo_id
+    ]
+    relevant_execution_task_ids = {
+        str(task["task_id"]) for task in current_tasks
+    } | {
+        str(dependency["task_id"])
+        for task in current_tasks
+        for dependency in task.get("depends_on", [])
+    }
     task_catalog: list[dict[str, Any]] = []
-    for task in _require_list(manifest, "tasks"):
-        change_paths = [
-            change_by_id[change_id]["path"] for change_id in task.get("change_ids", [])
-        ]
-        test_files = [
-            test_by_id[test_id]["file"] for test_id in task.get("test_ids", [])
-        ]
-        if task["repo_id"] == repository_match.repo_id:
-            baseline_status = classify_baseline(
-                Path(repository_match.repo_root),
-                repository_by_id[task["repo_id"]]["baseline"]["commit"],
-                sorted({*change_paths, *test_files}),
-            )
-        else:
-            baseline_status = "repo-unresolved"
+    for task in current_tasks:
         task_catalog.append(
             {
                 "task_id": task["task_id"],
@@ -650,13 +677,11 @@ def inspect_manifest(
                     else None
                 ),
                 "depends_on": task.get("depends_on", []),
-                "key_deliverables": change_paths,
-                "change_paths": change_paths,
-                "test_files": test_files,
-                "baseline_status": baseline_status,
+                "baseline_status": "not-inspected",
             }
         )
     return {
+        "inspection_mode": "manifest-only",
         "protocol": "canonical-v1",
         "schema": manifest["schema"],
         "source_path": str(resolved_spec),
@@ -668,7 +693,7 @@ def inspect_manifest(
         "design_sha256": report.design_sha256,
         "design_scope_sha256": None,
         "execution_scope_sha256": None,
-        "execution": _full_execution_projection(report),
+        "execution": _full_execution_projection(report, relevant_execution_task_ids),
         "repository_match": asdict(repository_match),
         "task_catalog": task_catalog,
         "selection_required": True,
@@ -685,11 +710,17 @@ def inspect_spec(
     repo_root: Path,
     task_ids: list[str],
     repo_path_values: list[str],
+    *,
+    refresh_only: bool = False,
 ) -> dict[str, Any]:
+    if refresh_only and not task_ids:
+        raise SelectionError("--refresh-only requires at least one --task")
     resolved_spec = _resolve_spec_path(spec_path)
     spec_text = resolved_spec.read_text(encoding="utf-8")
     report = _validate_snapshot(spec_text)
     if report.protocol == "legacy":
+        if refresh_only:
+            raise CanonicalSpecError("--refresh-only only supports Canonical Spec v1")
         return _legacy_result(resolved_spec, report)
     if not report.ok or report.manifest is None:
         raise _validation_error(report)
@@ -709,7 +740,10 @@ def inspect_spec(
         )
 
     scopes, scope_markdown, design_scope_digest, execution_scope_digest = _select_scopes(
-        spec_text, resolved_spec, grouped_task_ids
+        spec_text,
+        resolved_spec,
+        grouped_task_ids,
+        include_markdown=not refresh_only,
     )
     execution = _merge_execution(scopes)
     execution_status = _execution_status_by_task(execution)
@@ -753,6 +787,40 @@ def inspect_spec(
     repository_by_id = _index_unique(
         _require_list(manifest, "repositories"), "repo_id", "repositories"
     )
+    if refresh_only:
+        return {
+            "inspection_mode": "refresh-only",
+            "protocol": "canonical-v1",
+            "schema": manifest["schema"],
+            "source_path": str(resolved_spec),
+            "spec_id": manifest["spec_id"],
+            "revision": manifest["revision"],
+            "spec_status": manifest["status"],
+            "source_sha256": report.document_sha256,
+            "document_sha256": report.document_sha256,
+            "design_sha256": report.design_sha256,
+            "design_scope_sha256": design_scope_digest,
+            "execution_scope_sha256": execution_scope_digest,
+            "execution": execution,
+            "repository_match": asdict(current_match),
+            "repositories": [
+                {
+                    "repo_id": repo_id,
+                    "name": repository_by_id[repo_id]["name"],
+                    "path": str(repo_paths[repo_id]),
+                    "match": asdict(matches[repo_id]),
+                    "baseline": repository_by_id[repo_id]["baseline"]["commit"],
+                    "baseline_status": "not-inspected",
+                }
+                for repo_id in sorted(scopes)
+            ],
+            "selected_tasks": selected_with_execution,
+            "dependency_gaps": dependency_gaps,
+            "dependency_summary": dependency_summary,
+            "waves": _build_waves(selected_tasks),
+            "baseline_status": {},
+            "scope_markdown": "",
+        }
     baseline_status: dict[str, str] = {}
     repository_results: list[dict[str, Any]] = []
     for repo_id in sorted(scopes):
@@ -775,6 +843,7 @@ def inspect_spec(
         )
 
     return {
+        "inspection_mode": "selected",
         "protocol": "canonical-v1",
         "schema": manifest["schema"],
         "source_path": str(resolved_spec),
@@ -787,6 +856,7 @@ def inspect_spec(
         "design_scope_sha256": design_scope_digest,
         "execution_scope_sha256": execution_scope_digest,
         "execution": execution,
+        "repository_match": asdict(current_match),
         "repositories": repository_results,
         "selected_tasks": selected_with_execution,
         "dependency_gaps": dependency_gaps,
@@ -809,28 +879,28 @@ def _markdown_result(result: dict[str, Any]) -> str:
             "# Dev-Spec Manifest Inspection",
             "",
             f"- Protocol: `{result['protocol']}`",
+            f"- Inspection mode: `{result['inspection_mode']}`",
             f"- Spec: `{result['spec_id']}`",
             f"- Status: `{result['spec_status']}`",
             f"- Design SHA-256: `{result['design_sha256']}`",
             f"- Execution revision: `{result['execution']['execution_revision']}`",
             f"- Current repository: `{match['repo_id']}` via `{match['method']}`",
+            f"- Path hint: `{match['path_hint_status']}` (advisory only)",
             "",
-            "| Task | Repository | Design | Execution | Dependencies | Deliverables | Baseline | Title |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| Task | Repository | Design | Execution | Dependencies | Baseline | Title |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
         ]
         for task in result["task_catalog"]:
             dependencies = "<br>".join(
                 f"{dependency['type']}:{dependency['task_id']}"
                 for dependency in task["depends_on"]
             ) or "-"
-            deliverables = "<br>".join(task["key_deliverables"]) or "-"
             cells = (
                 task["task_id"],
                 task["repo_id"],
                 task["status"],
                 task["execution_status"] or "unavailable",
                 dependencies,
-                deliverables,
                 task["baseline_status"],
                 task["title"],
             )
@@ -841,6 +911,7 @@ def _markdown_result(result: dict[str, Any]) -> str:
         "# Dev-Spec Inspection",
         "",
         f"- Protocol: `{result['protocol']}`",
+        f"- Inspection mode: `{result['inspection_mode']}`",
         f"- Spec: `{result['spec_id']}`",
         f"- Status: `{result['spec_status']}`",
         f"- Source SHA-256: `{result['source_sha256']}`",
@@ -850,10 +921,9 @@ def _markdown_result(result: dict[str, Any]) -> str:
         f"- Execution revision: `{result['execution']['execution_revision']}`",
         f"- Execution scope SHA-256: `{result['execution_scope_sha256']}`",
         f"- Tasks: `{', '.join(task['task_id'] for task in result['selected_tasks'])}`",
-        "",
-        result["scope_markdown"].rstrip(),
-        "",
     ]
+    if result["scope_markdown"]:
+        lines.extend(("", result["scope_markdown"].rstrip(), ""))
     return "\n".join(lines)
 
 
@@ -917,22 +987,32 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="inspect routing metadata without selecting a task scope",
     )
+    parser.add_argument(
+        "--refresh-only",
+        action="store_true",
+        help="refresh selected Canonical identity and execution without scope Markdown or baseline",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        if args.manifest_only and args.refresh_only:
+            raise CanonicalSpecError("--manifest-only cannot be combined with --refresh-only")
         if args.manifest_only:
             if args.task_ids:
                 raise CanonicalSpecError("--manifest-only cannot be combined with --task")
             result = inspect_manifest(args.spec_path, args.repo_root, args.repo_paths)
         else:
+            if args.refresh_only and not args.task_ids:
+                raise CanonicalSpecError("--refresh-only requires at least one --task")
             result = inspect_spec(
                 args.spec_path,
                 args.repo_root,
                 args.task_ids,
                 args.repo_paths,
+                refresh_only=args.refresh_only,
             )
     except SelectionError as exc:
         if args.format == "json":

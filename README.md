@@ -1,480 +1,214 @@
-# Easy-Coding 智能编程助手
+# Easy Coding Skill
 
-> AI 编程协作技能，让 AI 成为懂业务、记历史、守规范、能理解 Spec 的编程伙伴。
+当前版本：`7.0.0`
 
-当前版本：`5.1.0`
+Easy Coding 是一个显式触发、轻量化、单入口的 AI 编程 Skill。7.0.0 固定采用 Guard 审批
+语义和 Standard 质量深度，不提供模式配置；核心目标是以最少运行时依赖提供方案确认、候选
+落地、独立审查、确定性验证、记忆和 Canonical 共享执行闭环。
 
-## 版本号规则
+## 7.0.0 设计边界
 
-- 第一位：重大功能更新大版本。
-- 第二位：新功能或新优化迭代。
-- 第三位：Bug 修复。
+- 唯一入口：`$easy-coding`，内部通过 `SKILL.md` 渐进加载 flow/reference/template/script。
+- 不依赖 Harness CLI、状态 API、Hooks、session、task 或平台配置。
+- 不安装测试基础设施，不提供测试先行专用工作流或直通执行路径。
+- `#no-coding` 只是当前轮完全跳过 Skill，下一轮恢复，不承担其他执行语义。
+- 已移除 With Claude 联合 flow、独立阶段、场景回归和 Task Packet；历史版本中的相关说明
+  仅是版本记录，不再是当前功能入口。
+- 同一修改任务只能有一个控制器：检测到 Harness 管理标记时，只读请求可以继续，修改任务
+  必须改用 Harness。
 
-## 5.1.0 更新
+## 工作流
 
-- Canonical Spec 从只读设计消费升级为“读取设计 + 共享 execution + 受控回写原 Spec”，保留六阶段、方案确认、记忆、Legacy 与 With Claude REVIEW 行为。
-- 新增同步协议模块 `scripts/easy_dev_spec_protocol.py`、共享 writer `scripts/dev_spec_execution.py` 和 CLI `scripts/update_dev_spec_execution.py`，支持 `show / init / task / step / dependency / sync-design`、文件锁、原子替换、CAS 和幂等事件。
-- Inspector 统一复用共享协议，稳定输出 document/design/design-scope/execution-scope 摘要与 execution 投影；静态 `READY` 和实际 `execution_status` 分开表达。
-- 用户显式提供任意绝对或相对 Dev-Spec 路径时直接使用原 locator，不再要求复制到 `.easy-coding/spec/dev/`；无显式路径时才兼容扫描候选目录。
-- hard、contract、integration 改为基于共享 execution 的明确门禁；integration 不阻断本仓编码，但阻断 Canonical task `completed`。
-- With Claude packet 增加设计与 execution 摘要；execution-only 变化只刷新进度，设计或设计范围变化会使旧分析/review 失效并返回 ANALYSIS。
-
-## 5.0.0 更新
-
-- 支持 `easy-dev-spec/v1` Canonical Spec：由文件级全文读取升级为 manifest 路由、仓库识别、task 选择和消费闭包装载。
-- 新增 Skill 内置只读标准库脚本 `scripts/inspect_dev_spec.py`，提供 remote 匹配、依赖闭包、baseline 漂移分类、原 Spec `source_sha256` 和消费闭包 `scope_sha256`；运行时从已加载 Skill 根目录解析脚本，不使用业务仓库的同名路径。
-- READY 且 baseline 可复用的 task 使用 ANALYSIS 快速路径，不重新设计已冻结契约和任务边界。
-- IMPLEMENT 以 `task_id / step_id / change_id / test_id` 作为进度和范围门禁，跨仓任务要求显式 repo path。
-- With Claude 只接收选中任务的消费闭包，并通过 `source_sha256` 与 `scope_sha256` 校验 Host/Claude 上下文一致性。
-- 无 manifest 的历史 Dev-Spec 继续走 legacy 全文流程；未来 schema、仓库不匹配和 baseline 不可用会明确阻断。
-
-## 4.3.3 更新
-
-- 修复实施确认后可能跳过短期记忆、直接写入长期记忆的问题。
-- `MEMORY_SHORT` 增加落盘门禁：用户确认实施结果后必须先新增并验证本轮 schema 2 短期记忆。
-- `MEMORY_LONG` 改为长期沉淀检查：短期记忆不足 10 条时不得写入 long 三文件，也不得删除短期记忆。
-- 初创项目初始化资产回补补齐 `.easy-coding/memory/short/`，避免回补长期三文件被误认为本轮任务已沉淀。
-
-## 4.3.2 更新
-
-- 修复 Dev-Spec 启动选择体验：扫描到候选后必须打印完整编号清单，不能只展示数量或状态。
-- Dev-Spec 多选统一使用编号输入，支持 `1,3`、`1-3`、`全部/all` 和 `不加载/none`。
-- 原生选择框只承接全部加载、不加载、暂不选择等真实分支，部分加载通过客户端 free-form Other 输入编号。
-- 新增 `GEMINI.md`，补齐 Antigravity / Gemini 系 agent 的仓库适配说明。
-
-## 4.3.1 更新
-
-- 修正注释语种门禁：新增或修改注释必须匹配当前对话语种，无法识别对话语种时默认使用简体中文。
-- 明确中文对话中不得默认写英文注释，除非用户明确要求英文或项目规范硬性要求英文。
-- 新建文件需要作者署名时，统一使用 `${Agent Name} with Easy Coding`，由宿主 Agent 替换自己的名称。
-
-## 4.3.0 更新
-
-- 新增 `flow/memory-retirement.md`，在长期记忆沉淀时按需执行定向淘汰检查。
-- 长期记忆会围绕本轮沉淀主题处理重复、冲突和过期内容，支持删除、合并和移入已淘汰记录。
-- `ANALYSIS` 默认只读取 active 主题和有效记忆区，不读取已淘汰记录，避免上下文污染。
-
-## 4.2.0 更新
-
-- 升级记忆系统为 `MEMORY.md / BUSINESS.md / TECHNICAL.md` 三文件长期结构，`MEMORY.md` 只做索引与读取导航。
-- 短期记忆新增 `memory_schema: 2` frontmatter 和业务/技术沉淀候选区，便于检索、分拣和审计。
-- 新版短期记忆改为滑动窗口沉淀：达到 10 条后只沉淀窗口外旧短期，保留最新 5 条近期上下文。
-- 新增旧版记忆渐进式迁移流程：INIT 阶段先探测并提示用户确认，确认后旧长期记忆自动拆分，旧短期记忆一次性沉淀并删除，迁移完成后自动进入分析。
-
-## 4.1.3 更新
-
-- 修正长期记忆沉淀规则：短期记忆达到阈值后全量沉淀，取消五条短期记忆留存策略。
-- 长期记忆更新成功后，删除本次已沉淀的全部短期记忆文件。
-- 统一沉淀阈值文案为“短期记忆 ≥10 条”。
-
-## 4.1.2 更新
-
-- 修复 Easy Coding With Claude 联合模式 REVIEW 软约束问题：IMPLEMENT 后不得只输出 host 自检式简短 review 来冒充 Claude review。
-- REVIEW 必须实际调用或尝试调用 With Claude `post_implementation_review`，并记录 wrapper path、final contract、worker status 和 verdict 来源。
-- 未执行 Claude、启动失败或未收到 final contract 时，只能降级为 `Claude review unavailable`，不得输出 Claude `accept`。
-
-## 4.1.1 更新
-
-- 优化原生选择框选项设计：选项必须映射真实下游分支，不再为凑数手写低价值反馈按钮。
-- 确认类场景只保留“确认项 + 保持等待/安全否决项”，修改意见、反馈意见和补充说明统一交给客户端 free-form Other。
-- Dev-Spec 超过 3 个候选时曾改为先选加载策略、再通过输入框按编号回复；该策略已在 4.3.2 收敛为统一编号多选。
-
-## 4.1.0 更新
-
-- 收敛阶段状态机：用户可见阶段只能使用 `INIT / ANALYSIS / WAITING_CONFIRM / IMPLEMENT / REVIEW / MEMORY_SHORT / MEMORY_LONG / COMPLETE`。
-- 明确禁止 `[阶段：PLAN]`、`[阶段：VERIFY]`、`[阶段：TEST]`、`[阶段：DONE]`、`[阶段：REVIEW_BLOCKED]`；验证、测试、自检都属于 `IMPLEMENT` 内部工作。
-- 修正记忆生成门禁：Claude review accept、测试通过、host 自检通过都不等于用户确认结果；实施结果报告输出后必须等待用户确认，确认后才进入 `MEMORY_SHORT`。
-- 强化原生选择框能力探测：当前 agent 暴露 `request_user_input` 或等价工具时必须调用；不支持时才文本兜底。
-- 压缩 `agents/openai.yaml` 的默认提示，避免 metadata 承载过多流程细节造成阶段污染。
-
-## 4.0.2 更新
-
-- 修复 Easy Coding With Claude 联合模式在“确认结果”后未进入记忆阶段的问题：已激活流程的确认续流不要求用户再次显式触发 `$easy-coding`。
-- 明确 REVIEW 结束后的实施结果确认必须按项目模式进入后续流转，不能停留在 REVIEW 或普通对话确认。
-- 明确 `post_v1_auto_init` 是初创项目第一版完成后的“初始化资产回补”，仅用于首次任务跳过前置 INIT 的场景。
-
-## 4.0.1 更新
-
-- 修复 Easy Coding With Claude 联合模式阶段串线：ANALYSIS 固定使用 Easy Coding 完整方案模板，不再因 With Claude `plan_mode` 退化为简单计划。
-- 明确 Easy Coding 不存在 `[阶段：PLAN]`；With Claude 的 `workflow_type` / `phase` 只属于 worker task packet，不代表 Easy Coding 用户可见阶段。
-- 明确 Claude 分析未返回时仍处于 `[阶段：ANALYSIS]`，只能汇报协作进展，不能提前进入 `WAITING_CONFIRM` 或误用 `[阶段：REVIEW]`。
-- 收紧 `REVIEW` 进入条件：只能在 IMPLEMENT 完成，并具备变更清单、验证结果和 host 自检结论后进入。
-
-## 4.0.0 更新
-
-- 新增 Easy Coding With Claude 联合模式：仅当用户同时显式引用 Easy Coding 与 With Claude 时启用。
-- 联合模式下，`INIT` / `ANALYSIS` / `REVIEW` 可调用 Claude 只读协作，`IMPLEMENT` 仍由本地 host agent 独立完成。
-- 实施完成后自动进入 Claude 只读 Review；`fix` 最多循环 3 轮，未收敛时在实施结果报告中说明剩余问题并等待用户指令，不新增阻断阶段。
-- 新增 `flow/with-claude.md`，以渐进式加载承载组合编排，避免污染普通 Easy-Coding 流程。
-
-> 4.0.0 是 Easy Coding 与 With Claude 协同能力的首个大版本：普通 Easy-Coding 七阶段流程保持兼容，联合模式仅在双显式触发时启用。
-
-## 3.1.2 更新
-
-- 收敛 `ANALYSIS` 方案模板为“核心必填 + 条件展开”，小改动不再强制输出无关章节。
-- 新增短期记忆模板，修正记忆阶段为“实施结果经用户确认后自动生成短期记忆并检查长期沉淀”。
-- 收敛注释规范：保留必要注释，避免把所有公开方法都一刀切要求文档注释。
-
-## 3.1.1 更新
-
-- 明确区分“只读上下文采集”和“写入 / 修改类操作”。
-- `INIT` / `ANALYSIS` 阶段必须主动扫描项目、读取配置与固定上下文，不需要用户先确认。
-- 方案确认前禁止的是写入、修改、常规初始化写入、记忆写入、提交和推送，不是 `rg` / `ls` / 读取文件这类只读扫描；初创项目 `post_v1_auto_init` 初始化资产回补在用户确认第一版实现结果后自动执行。
-
-## 3.1.0 更新
-
-- `ANALYSIS` 技术方案新增逐文件“改动范围”表，明确改动文件、改动类型、文件编码和改动核心内容。
-- 强化文件编码约束：修改旧文件必须保持原编码，新建文件必须套用项目编码，编码不明确时先等待用户确认。
-- `WAITING_CONFIRM` 阶段收到用户修改意见后，必须输出“基于用户要求的改动提要”和“修改后的完整方案”，再等待确认。
-
-## 3.0.0 更新
-
-- 新增 `.easy-coding/spec/dev/` 运行时候选目录扫描，不再把 Dev-Spec 作为固定全局输入。
-- 扫描到 Dev-Spec 后会先显式提示用户，并要求用户选择加载范围后再进入分析；当前策略以 4.3.2 的统一编号多选为准。
-- 已选 Dev-Spec 仅对当前需求生效，不写入长期资产，也不会在后续需求中自动加载。
-- 用户拒绝加载 Dev-Spec 且当前轮没有有效提示词或固定 Spec / Prototype 时，直接友好退出，不强行进入分析。
-- `ANALYSIS` 输出会保留 Dev-Spec 候选文件、已选文件和未加载文件列表，便于复盘与控制。
-
----
-
-## 产品简述
-
-Easy-Coding 面向真实软件研发协作场景设计。它不只是代码生成器，而是带有阶段管控、项目记忆、规范约束和 Spec 驱动能力的协作式编程技能。
-
-本次升级后，Easy-Coding 同时支持两类项目：
-
-- **初创项目**：项目尚未形成成熟业务代码，允许基于 Spec 驱动第一版建设
-- **迭代项目**：项目已有成型业务代码，继续按照既有系统做保守迭代
-
----
-
-## 核心能力
-
-### 1. 三层结构
-
-Easy-Coding 采用“三层结构”组织规则，降低上下文污染：
-
-- `SKILL.md`
-  - 总控层
-  - 负责全局约束、阶段定义、模式判定、输入发现、冲突处理、流程路由
-- `agents/openai.yaml`
-  - 接口层
-  - 负责 Codex 侧展示名称、简述和默认调用提示词
-- `flow/`
-  - 流程层
-  - 负责初始化、初创项目等场景流程
-- `references/`
-  - 参考层
-  - 负责按需加载的设计规范与未来语言规范
-
-### 2. Spec 驱动开发
-
-Easy-Coding 支持在原有 `.easy-coding` 资产之外，按需读取以下输入：
-
-- `.easy-coding/spec/Architect-Spec.md`
-- `.easy-coding/spec/Product-Spec.md`
-- `.easy-coding/spec/UI-Spec.md`
-- `.easy-coding/prototype/Easy-UI-Prototype.md`
-- `.easy-coding/prototype/` 下的 HTML 原型文件、assets 和 AI 原生生图图片
-- `.easy-coding/spec/dev/` 下的候选 Dev-Spec 文档（仅扫描候选，不自动读取正文）
-
-读取规则：
-
-- 存在则读取，不存在则跳过
-- 能从代码、Spec、Prototype 推断的信息不重复追问
-- 当前提示词与 Spec 冲突时，必须提示用户拍板
-- 若项目被识别为初创项目，且已发现可用 Spec / Prototype，系统会主动进入分析，不等待用户补充需求描述
-
-关于 Dev-Spec：
-
-- `spec/dev/` 是运行时候选目录，不属于固定全局 Spec 输入
-- 扫描到候选后，Easy-Coding 会先显式告诉用户“已扫描到 Dev-Spec”
-- 用户显式引用具体路径时将原路径作为唯一 locator，不再扫描、复制或要求编号选择；未给路径时才按编号完整列出候选，支持 `1,3`、`1-3`、`全部/all` 和 `不加载/none`
-- 选中文件后先以 `--manifest-only` 探测协议：无 manifest 的 legacy 文档才读取全文；`easy-dev-spec/v1` 先识别仓库和 task，只加载选中任务的消费闭包
-- Canonical Spec 每轮只激活一份，支持当前仓全部 READY task、显式 task ID 和显式跨仓 repo path；`READY` 是静态设计状态，实际进度读取 `execution_status`
-- 进入开发后由受控 writer 在原 Spec 内共享 task/Step/依赖状态；设计摘要用于确认门禁，document/source 摘要只作诊断
-- 仓库身份出现多个候选时先展示候选并等待确认，确认后通过显式 repo path 恢复 manifest task catalog 和完整检查；零匹配仍会阻断
-- READY/exact 或 scope-unchanged 场景进入快速分析；scope-drifted 重新检查实际文件，baseline-unavailable 停止实施
-- 已选 Dev-Spec 仅对当前需求生效，不写入长期资产，也不会在后续需求中自动加载
-- 若用户拒绝加载，且当前轮又没有任何可支撑分析的有效提示词或固定 Spec / Prototype，Easy-Coding 会直接提示已准备好并退出当前流程
-
-### 3. 初创项目与迭代项目
-
-#### 初创项目
-
-- 基本无成型业务代码
-- 触发后会主动做空项目 / 近似空项目检测，不依赖用户口头声明
-- 首次任务跳过前置初始化
-- 若已存在 Spec / Prototype，会直接基于文档进入 ANALYSIS
-- 若仅存在 `spec/dev/` 候选文档，会先完成候选选择；legacy 选定后全文进入 ANALYSIS，Canonical v1 先完成 repo/task 路由和 baseline 检查
-- 严格按 Spec 推进第一版开发
-- 第一版开发完成并经用户确认后，若首次任务跳过了前置 INIT，自动执行初始化资产回补，再进入记忆阶段
-
-#### 迭代项目
-
-- 已存在明确业务代码、页面、接口、服务或领域模型
-- 保持六阶段主流程
-- ANALYSIS 阶段会参考 Spec，但默认以现有代码现状为主，且必须先阅读相关代码后再给出实施级方案
-- 若 Spec 与现有代码冲突，默认采用保守迭代策略
-
-### 4. 长短期记忆系统
-
-**短期记忆：任务级追溯**
+合法阶段固定为：
 
 ```text
-格式：SM-019f1234-5678-7abc-8def-0123456789ab_20260324_新增用户登录功能.md
-内容：frontmatter 元数据、任务摘要、执行证据、业务记忆候选、技术记忆候选、不沉淀内容、关联记忆
+INIT / ANALYSIS / IMPLEMENT / QUALITY / MEMORY / COMPLETE / CLOSED
 ```
 
-- 新短期记忆使用 `SM-<UUIDv7>` 作为 frontmatter `id` 和文件名前缀，不再扫描目录计算数字序号；旧数字文件名和 `SM-YYYYMMDD-NNN` ID 保持兼容读取
-- 单条短期记忆创建后不修改，作为待沉淀任务记录保留
-- 实施结果经用户确认后，必须先新增本轮短期记忆并验证文件已落盘；不得用直接更新长期记忆替代短期记忆
-- frontmatter 必须包含 `memory_schema: 2`、任务类型、业务域、标签、关键文件、提交、验证状态、沉淀目标
-- `target_long=BUSINESS / TECHNICAL / BOTH / NONE` 是未来进入滑动窗口外时的沉淀建议，沉淀时仍结合正文和当前代码复核
-- 短期记忆同时承担近期细节滑动窗口和待沉淀缓冲区职责，支持前置 / 后续关联，并明确哪些内容不进入长期记忆
-
-**长期记忆：三文件知识资产**
-
-- 短期记忆生成与长期沉淀检查统一在 `MEMORY` 阶段完成；本轮短期记忆成功落盘后，才允许计算归档指令
-- 默认 `short_term_max=10`、`short_term_keep=5`；仅当短期记忆数量严格大于 max 时 `distill`，因此 10 条为 `no-op`，第 11 条写入后归档最旧 6 条并保留最新 5 条
-- 项目已有 `.easy-coding/config.yaml` 时读取 `memory.short_term_max/short_term_keep`；`keep > max` 会阻断归档，避免产生无法收敛的窗口
-- 排序使用 `date → ID 类型 → id → 文件名`；同日旧 `SM-YYYYMMDD-NNN` ID 排在 UUIDv7 ID 前
-- `MEMORY.md` 只做索引与读取导航
-- `BUSINESS.md` 保存业务概念、字段语义、业务流程、业务规则、上下游契约、业务排障经验
-- `TECHNICAL.md` 保存架构决策、接口决策、工程规则、实现模式、易错点、验证/发布经验
-- 长期沉淀时按需加载 `flow/memory-retirement.md`，对本轮命中主题执行定向淘汰检查；已淘汰记录默认不进入分析上下文
-- 长期沉淀时冻结候选与保留集合；成功后消费全部候选并验证候选已删除、保留文件仍存在
-- INIT 阶段发现旧版记忆时先提示用户确认；确认后按 `flow/memory-migration.md` 渐进迁移：旧长期拆分为三文件，旧短期一次性沉淀并删除，迁移完成后自动进入分析，后续新短期按滑动窗口运行
-- 让 AI 在后续任务中持续复用历史知识
-
-### 5. 前端任务增强
-
-涉及页面、界面、交互、样式、组件、前端重构或视觉升级时：
-
-- 必须优先启用 `frontend-skill`
-- 若执行环境支持 agent / 子代理协作，应尽可能调度带前端 skill 的实现角色
-- 按需读取 `references/design/apple-design-reference.md`
-- 优先参考 `.easy-coding/prototype/` 下的 Prototype 文档、HTML、assets 与 images
-
-**重要边界：**
-
-- Prototype HTML 与图片仅供原型参考
-- 不得直接复制到生产代码，也不得把图片当作生产设计稿
-- 必须结合当前项目框架、组件体系、状态管理、路由和样式方案做深度再设计与适配
-- 若交付目标是真实前端代码，必须完成真实接口对接或明确的接口契约接入，不能用 mock 页面冒充最终结果
-
-### 6. With Claude 联合模式
-
-当用户同时显式引用 Easy Coding 与 With Claude 时，Easy-Coding 会进入联合模式，并明确展示：
+修改任务主链：
 
 ```text
-已启动: Easy Coding With Claude 模式
+INIT → ANALYSIS → IMPLEMENT → QUALITY → MEMORY → COMPLETE
 ```
 
-联合模式的边界：
+- INIT 只读盘点项目模式、控制器标记和共享项目知识；缺失资产进入待确认的
+  Initialization Unit，INIT 本身不写项目文件，盘点后自动进入 ANALYSIS。
+- ANALYSIS 发现真实上下文，输出确认范围、Implementation Unit、Local Baseline、精确验证命令
+  和 reviewer 关注点；方案在 ANALYSIS 内等待用户确认。
+- IMPLEMENT 只落地确认范围内的代码和测试，并做范围/编码/注释自检；不运行确定性验证。
+- QUALITY 固定执行审查门和验证门。优先使用宿主原生独立 reviewer，不可用时由主代理按同一
+  清单降级自审，并披露来源。
+- QUALITY 绿色后采用 Guard 结果确认；用户确认后才进入 MEMORY。
+- MEMORY 创建质量证据完整的短期记忆，执行 max 10 / keep 5 冻结窗口，成功后 COMPLETE。
+- 显式中止进入 CLOSED，并清理仓库外临时 baseline。
 
-- `INIT`：Claude 只读参与项目摘要、规则和背景梳理，host agent 合并并负责写入。
-- `ANALYSIS`：Claude 参与方案分析，但 Easy Coding 阶段仍固定为 `ANALYSIS`，最终必须输出完整技术方案模板，并写明 Claude 观点、采纳情况和冲突点。
-- `IMPLEMENT`：Claude 不参与，仍由本地 host agent 按确认方案完成写入。
-- `REVIEW`：实施完成且已有变更清单、验证结果和 host 自检结论后调用 Claude 只读 review，host agent 判断是否采纳并修复。
-- `REVIEW` 最多 3 轮；未收敛时结束 review，在实施结果报告中说明剩余问题和风险，等待用户进一步指令。
-- Claude 不可用时允许降级为 host-only，并在报告中标注 `Claude pass unavailable`。
+只读请求走 `ANALYSIS → COMPLETE`，不创建质量基线、候选指纹或记忆。
 
-阶段边界：
+## Standard QUALITY
 
-- Easy Coding 合法阶段只有 `INIT / ANALYSIS / WAITING_CONFIRM / IMPLEMENT / REVIEW / MEMORY / COMPLETE`。
-- `PLAN` 不是 Easy Coding 阶段；任何用户可见输出都不得写 `[阶段：PLAN]`。
-- `VERIFY` / `TEST` / `DONE` / `REVIEW_BLOCKED` 也不是 Easy Coding 阶段；验证、自检和测试仍属于 `IMPLEMENT`，完成只能使用 `COMPLETE`。
-- With Claude 的 `workflow_type` / `phase` 只是 worker task packet 字段，不等于 Easy Coding 阶段。
-- Claude 分析还在运行时，进度更新仍使用 `[阶段：ANALYSIS]`，只能汇报协作进展和已读证据；收到 `done / blocked / needs_user_input` 后才合并输出完整方案。
+审查和验证绑定同一 `candidate_sha256`：
 
----
+1. IMPLEMENT 前，`scripts/quality_fingerprint.py baseline` 把 HEAD 与预存脏状态写入仓库外
+   临时 JSON。
+2. QUALITY 通过 `capture` 计算范围内业务候选，并单列机器 ignore 与意外范围外变化；候选
+   摘要同时绑定 HEAD 和确认的 scope/ignore。
+3. 每个 Gate 后通过 `check --expected` 重算；HEAD 移动、候选漂移或新增范围外变化都会使
+   本轮证据失效。
+4. 审查发现分为 `code-defect`、`test-defect`、`contract-ambiguity`、`environment`、
+   `suggestion`。前两类聚合为一次 Repair Bundle。
+5. 验证门执行方案中的受影响 lint/typecheck/test，以及契约、构建配置或项目规则要求的
+   build；缺少环境时停留 QUALITY，不临时安装基础设施制造绿色。
+指纹脚本只依赖 Python 标准库与 Git，支持 staged/unstaged/untracked/删除、文件模式、符号
+链接、Git 特殊字符和多仓组合。符号链接只散列链接本身，不跟随到仓库外。预存无关脏改动
+相对 baseline 不变时不会阻断。脏 gitlink 必须把对应子仓作为独立 `--repo` 纳入，否则脚本
+拒绝建立候选；Gate 期间才出现的未覆盖脏 gitlink 由 `check` 按漂移返回 3。
+未跟踪 nested Git repo 也必须作为独立 `--repo` 纳入，不能只指纹父目录。
 
-## 工作流程
+## 与 Harness 的共享数据
 
-### 统一六阶段
+公共共享层：
+
+- `.easy-coding/SOUL.md`
+- `.easy-coding/RULES.md`
+- `.easy-coding/ABSTRACT.md`
+- `.easy-coding/TEST_STRATEGY.md`
+- `.easy-coding/CHANGELOG.md`（有证据的架构认知变化）
+- Spec、Prototype、Canonical 原文件及 `EDS:EXECUTION`
+- `.easy-coding/memory/short/` 与 `.easy-coding/memory/long/`
+
+Harness 私有层：
+
+- `.easy-coding/config.yaml`、`project.yaml`、`install-manifest.json`
+- sessions、tasks、派生 task/dev-spec/test-strategy/execution/report
+- `.codex/`、`.claude/`、`.gemini/`、`.qoder/` 的托管配置、Hooks 与 skills
+
+Easy Coding 不把私有文件当自身配置，不生成或修改它们。详细标记和路由见
+`references/shared-data.md`。
+
+## Canonical 共享时序
+
+Easy Coding 继续原地消费 `easy-dev-spec/v1`，不复制 Canonical，也不生成 Harness 普通任务
+产物：
 
 ```text
-INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → MEMORY → COMPLETE
+方案确认
+  → init execution / task in_progress
+  → IMPLEMENT 候选
+  → QUALITY 双门 + 稳定 candidate SHA
+  → Step completed（绑定 Canonical Test 证据）
+  → task implemented
+  → integration satisfied
+  → 用户确认 Guard 结果
+  → task verified
+  → MEMORY 成功
+  → task completed
 ```
 
-联合模式会在 `IMPLEMENT` 后增加一个只读 Review 插槽：
+integration 未满足时保持 QUALITY/implemented，不显示最终结果确认。Canonical execution-only
+受控写回作为机器事实单列，不进入业务候选摘要；设计摘要和 execution revision 仍由 writer
+双 CAS 校验。
 
-```text
-INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → REVIEW → 实施结果报告 → 用户确认结果 → 按项目模式进入初始化资产回补或 MEMORY → COMPLETE
+## 项目知识与记忆
+
+初始化公共层会补齐 `TEST_STRATEGY.md`，记录项目现有 lint/typecheck/test/build 入口、测试
+分层、环境依赖和 Canonical Test 映射，不生成任务级派生策略。
+
+短期记忆 frontmatter 兼容字段：
+
+```yaml
+memory_schema: 2
+id: SM-<UUIDv7>
+source_task: ec-skill-<UUIDv7>
+workflow_mode: standard
+producer: easy-coding-skill
 ```
 
-### 初创项目流程
+短期正文还记录 candidate SHA、reviewer 来源、发现/修复、验证证据、用户确认与剩余风险。
+窗口固定 max 10 / keep 5，只有数量严格大于 10 才 distill。长期沉淀时才评估架构；只有模块
+边界、依赖方向、核心数据流、技术栈、构建或部署变化才更新 ABSTRACT 和 CHANGELOG。
 
-```text
-模式判定 → 空项目检测 → 发现 Spec / Prototype → 跳过前置 INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT
-→ 用户确认第一版结果 → 初始化资产回补 → MEMORY → COMPLETE
-```
+## Git 纪律
 
-实施结果报告后的“确认结果”属于已激活流程续流，不要求用户再次显式引用 `$easy-coding`；但必须先等待用户确认结果，不能在输出实施结果报告的同一轮生成记忆。
+- 相关共享 `.easy-coding` 知识与记忆默认属于交付范围；sessions 和 Harness 私有层永不提交。
+- `.easy-coding/spec/dev/` 只有用户明确要求时才提交。
+- 跨仓先交付子仓，再交付父 gitlink。
+- `.easy-coding` 冲突必须先说明双方语义和归纳式方案，获得确认后才能修改。
+- “提交推送”必须证明远端 SHA 等于本地 HEAD、ahead/behind `0/0` 和最终状态，不只报告本地
+  commit。
 
-详细规则见：
-
-- `flow/startup-project.md`
-- `flow/init.md`
-
-### 迭代项目流程
-
-```text
-模式判定 → INIT → ANALYSIS → WAITING_CONFIRM → IMPLEMENT → MEMORY → COMPLETE
-```
-
----
+详细规则见 `flow/git.md`。
 
 ## 触发方式
 
-**仅支持显式加载：**
+只支持显式加载：
 
-- `使用 $easy-coding ...`
-- `加载 easy-coding ...`
-- `使用 Easy Coding skill ...`
+- `使用 $easy-coding 实现……`
+- `加载 easy-coding 分析并开发……`
+- `使用 Easy Coding skill……`
 
-若需要联合 With Claude，必须同时显式引用两个 skill：
+普通“帮我实现/修改/修复”不会隐式加载。已激活流程中的方案确认、QUALITY 结果确认和
+MEMORY 续流无需再次点名。
 
-- `使用 $easy-coding 和 $with-claude ...`
-- `加载 Easy Coding skill，并搭配 With Claude skill ...`
+当前轮完全旁路：
 
-普通任务描述不会自动加载本 skill，例如“帮我实现”“帮我修改”“我有一个需求”等都只按普通 agent 流程处理，除非用户同时显式点名 Easy Coding。
-
-### 跳过 skill 流程
-
-若已经显式加载 Easy Coding，但当前轮不希望进入 Easy-Coding 的阶段流程，可在消息开头写入 `#no-coding`。
-
-例如：
-
-- `#no-coding 帮我看下当前分支状态`
-- `#no-coding 帮我整理这个报错原因`
-
----
+```text
+#no-coding 帮我只看一下当前状态
+```
 
 ## 目录结构
 
 ```text
 easy-coding/
-├── agents/
-│   └── openai.yaml
 ├── SKILL.md
+├── agents/openai.yaml
 ├── flow/
+│   ├── analysis.md
+│   ├── implement.md
+│   ├── quality.md
+│   ├── memory.md
 │   ├── init.md
 │   ├── startup-project.md
+│   ├── git.md
 │   ├── memory-migration.md
-│   ├── memory-retirement.md
-│   └── with-claude.md
+│   └── memory-retirement.md
 ├── references/
-│   ├── design/
-│   │   └── apple-design-reference.md
-│   ├── dev-spec/
-│   │   └── canonical-v1.md
-│   ├── scenarios/
-│   │   └── easy-coding-with-claude.md
-│   └── coding/
-│       └── README.md
+│   ├── shared-data.md
+│   ├── dev-spec/canonical-v1.md
+│   ├── design/apple-design-reference.md
+│   └── coding/README.md
 ├── scripts/
-│   ├── easy_dev_spec_protocol.py
-│   ├── dev_spec_execution.py
+│   ├── quality_fingerprint.py
 │   ├── inspect_dev_spec.py
-│   └── update_dev_spec_execution.py
-├── tests/
-│   ├── fixtures/
-│   │   ├── easy-dev-spec-v1-final.md
-│   │   └── legacy-dev-spec.md
-│   ├── test_inspect_dev_spec.py
-│   └── test_dev_spec_execution.py
+│   ├── update_dev_spec_execution.py
+│   ├── dev_spec_execution.py
+│   └── easy_dev_spec_protocol.py
 ├── templates/
 │   ├── SOUL.md
 │   ├── RULES.md
 │   ├── ABSTRACT.md
+│   ├── CHANGELOG.md
+│   ├── TEST_STRATEGY.md
+│   ├── SHORT_MEMORY.md
 │   ├── MEMORY.md
 │   ├── BUSINESS.md
-│   ├── TECHNICAL.md
-│   ├── SHORT_MEMORY.md
-│   └── CLAUDE_TASK_PACKET.md
-└── .easy-coding/
-    ├── SOUL.md
-    ├── RULES.md
-    ├── ABSTRACT.md
-    ├── spec/
-    ├── prototype/
-    │   ├── Easy-UI-Prototype.md
-    │   ├── index.html
-    │   ├── assets/
-    │   └── images/
-    └── memory/
-        ├── short/
-        └── long/
-            ├── MEMORY.md
-            ├── BUSINESS.md
-            └── TECHNICAL.md
+│   └── TECHNICAL.md
+└── tests/
 ```
 
----
+## 验证
 
-## 关键约束
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -v
+PYTHONPYCACHEPREFIX=<system-temp>/easy-coding-pyc python3 -m py_compile scripts/*.py
+python3 /path/to/skill-creator/scripts/quick_validate.py .
+git diff --check
+```
 
-- 方案未确认前，禁止执行代码变更、常规初始化写入、实施后记忆写入、提交或推送；旧版记忆兼容迁移仅限 `.easy-coding/memory/`，必须在 INIT 阶段提示并获得用户确认后按 `flow/memory-migration.md` 渐进触发；初创项目初始化资产回补按 `post_v1_auto_init` 流程，在用户确认第一版实现结果后自动执行
-- 只读上下文采集不属于禁止范围；`INIT` / `ANALYSIS` 阶段必须主动扫描项目、读取配置、读取固定上下文并基于真实现状输出方案
-- 无论变更大小，必须重新确认
-- 每次回复必须标注当前阶段
-- 不允许输出 `[阶段：PLAN]`、`[阶段：VERIFY]`、`[阶段：TEST]`、`[阶段：DONE]`、`[阶段：REVIEW_BLOCKED]`；等待 Claude 分析时仍属于 `[阶段：ANALYSIS]`；`REVIEW` 只能在 IMPLEMENT 完成后出现
-- 当前 agent 暴露 `request_user_input` 或等价原生选择工具时，确认执行方案、确认结果和 Dev-Spec 选择必须调用工具；不支持时才文本兜底
-- Canonical Spec 候选选择后必须先运行只读检查脚本；Agent 上下文只能装载 `scope_markdown`，不得整篇读取未选仓库和 task 正文
-- Canonical task 的仓库、文件、符号、step 和 test 范围均为实施硬门；remote 不匹配、baseline 不可用或 hard dependency 未满足时不得进入实现；integration 未闭合时 task 保持 `verified`
-- Canonical execution 只能通过 Skill writer 更新原 Spec；每次事件必须携带稳定 run ID、幂等键、预期设计摘要和 execution revision
-- With Claude packet 必须携带与 Host 一致的 `design_sha256 / design_scope_sha256` 及当前 execution revision/scope；`source_sha256` 仅诊断，并丢弃 worker 返回的任何越界 task 内容
-- 原生选择框选项必须映射真实下游分支，不得与客户端 free-form Other 重叠；修改意见、反馈意见和补充说明不要手写成按钮
-- 实施结果报告输出后必须等待用户确认结果；Claude review accept、测试通过、host 自检通过都不等于用户确认结果
-- 用户确认实施结果后，必须进入单一 `MEMORY` 阶段先生成并验证本轮 UUIDv7 短期记忆；长期记忆仅在短期数量严格大于 max 时处理冻结候选，`no-op` 时不得写入 long 或删除短期记忆
-- ANALYSIS 方案必须按“核心必填 + 条件展开”输出；无关条件章节不要硬填
-- ANALYSIS 方案必须包含“改动范围”表，逐文件说明改动文件、改动类型、文件编码和改动核心内容
-- ANALYSIS 方案必须包含“待用户决策”和“验证与验收”，冲突存在时先等待用户拍板
-- 修改旧文件必须保持原文件编码；新建文件必须套用项目编码；用户可在确认前修改任一文件的编码要求
-- 编码时必须补充必要注释；新增或修改注释必须匹配当前对话语种，无法识别对话语种时默认使用简体中文；若用户明确指定注释语言，以用户要求为准
-- 新建文件若因项目模板、同类文件惯例或用户要求需要作者署名，必须写为 `${Agent Name} with Easy Coding`
-- ANALYSIS 方案必须列出注释策略；IMPLEMENT 完成后必须回看 diff 做注释语种、作者署名和必要性自检，已补充或无需补充都要说明原因
-- WAITING_CONFIRM 阶段若用户提出修改意见，下一轮必须输出“基于用户要求的改动提要”和“修改后的完整方案”，不能只回复摘要
-- 当前提示词与 Spec 冲突时，必须先询问用户
-- Prototype HTML 与图片永远只作为参考输入，不直接当作生产实现或生产设计稿
-- Apple 设计规范只是默认高质量前端基线，不覆盖项目既有设计系统或用户显式要求
+语法检查完成后清理仓库外的 `easy-coding-pyc` 临时目录；不得把 `__pycache__` 写入项目。
 
----
+## 历史版本
 
-## 参考资料
-
-### 设计参考
-
-- `references/design/apple-design-reference.md`
-  - 用途：前端视觉与交互参考
-  - 读取策略：前端相关任务默认参考；若用户没有特殊风格要求，默认采用 Apple 风格质感作为视觉基线
-
-### 编码参考
-
-- `references/coding/`
-  - 预留给 Java、TypeScript、Go、Python 等语言 / 框架规范
-  - 不默认加载，按任务类型按需扩展
-
----
-
-## 最佳实践
-
-1. 初创项目尽量先准备 Product / UI / Architect Spec，再让 Easy-Coding 按 Spec 推进第一版开发。
-2. 迭代项目中，如果历史 Spec 与现状代码已经偏离，优先让 Easy-Coding 先说明冲突，而不是直接强推 Spec。
-3. 前端任务尽量同时提供 UI-Spec、Prototype 文档、原型 HTML 或 AI 原型图片，能显著提升分析质量。
-4. 不要把 Prototype HTML 或图片当成最终页面代码 / 生产设计稿；真正实现时应结合工程环境重新设计与适配。
-5. 若任务目标是生产级前端交付，必须要求 AI 明确页面映射、组件拆解、数据来源和接口对接方案；只有 mock 页面不算完成。
-6. 若仓库中已经有代码，ANALYSIS 必须先基于实际代码给出现状和修改方案；只复述需求不算合格分析。
-
----
-
-## 总结
-
-Easy-Coding 的目标不是替代工程师，而是让 AI 更像一名有流程感、能守边界、懂上下文、会参考 Spec 的协作伙伴：
-
-- **懂业务**：通过记忆与 Spec 理解项目背景
-- **守规范**：自动遵守编码规则与阶段约束
-- **可追溯**：方案、变更、记忆都有明确记录
-- **可控制**：专家全程把关，避免 AI 擅自推进
+- `7.0.0`：删除联合协作功能，新增固定 QUALITY 双门、质量指纹、共享数据控制器边界、项目级
+  TEST_STRATEGY 和 Git 交付纪律。
+- `6.0.0`：完成 Canonical 原文件单一消费闭包和受控 writer 重构；当时仍保留联合协作功能。
+- `5.1.0`：统一 schema 2 记忆窗口与 Canonical 基础协议。

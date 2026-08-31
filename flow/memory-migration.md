@@ -1,13 +1,15 @@
 # 记忆兼容迁移流程
 
-> 本文件由 `SKILL.md` 在 INIT 阶段发现旧版记忆结构并获得用户确认后加载执行。
+> INIT 只读发现旧版记忆结构后，由 ANALYSIS 把迁移列为 Migration Unit；用户确认完整方案后，
+> 在 IMPLEMENT 加载执行。
 > 迁移范围仅限 `.easy-coding/memory/`，不得修改业务代码、Spec、Prototype 或其他项目文件。
 
 ---
 
 ## 进入条件
 
-满足任一条件时，`SKILL.md` 必须先在 `[阶段：INIT]` 提示用户确认；用户确认后才进入 `legacy_memory_migration`：
+修改任务满足任一条件时，ANALYSIS 必须列出 `legacy_memory_migration` Unit、精确文件范围与
+保留/删除规则；用户确认完整方案后才进入 IMPLEMENT：
 
 - `.easy-coding/memory/long/MEMORY.md` 存在但缺少 `memory_schema: 2`
 - `.easy-coding/memory/long/BUSINESS.md` 缺失
@@ -19,7 +21,7 @@
 
 ## 迁移原则
 
-1. 未获得用户明确确认前，不得执行迁移；确认提示和用户确认均发生在 `INIT` 阶段。
+1. 未获得包含 Migration Unit 的完整方案确认前不得执行；INIT 只读盘点，不设置单独确认门。
 2. 旧版长期记忆不得丢弃，必须迁移到 `BUSINESS.md`、`TECHNICAL.md`、新索引或已淘汰记录中。
 3. 旧版短期记忆不先转换为新版短期模板；触发旧版迁移时，所有旧版短期记忆一次性参与沉淀。
 4. 迁移成功后，删除全部已处理的旧版短期记忆文件；迁移完成后，新生成的 schema 2 短期记忆才按滑动窗口运行。
@@ -67,7 +69,9 @@
   - 同日优先按旧 `SM-YYYYMMDD-NNN` ID、UUIDv7 ID、其他 ID 的顺序排列
   - 同类按 frontmatter `id` 升序，仍无法区分时按文件名升序稳定排序
 - 旧版短期数量 <10 条时也参与本次迁移沉淀，避免缺少 frontmatter 的旧文件反复触发迁移
-- 上述 `<10 条也沉淀` 仅适用于 `INIT` 阶段的旧版记忆兼容迁移；正常实施收尾必须先在 `MEMORY` 新增本轮 schema 2 短期记忆，再按“数量严格大于 max 才 distill”的滑动窗口门禁检查，不能直接写入长期记忆
+- 上述 `<10 条也沉淀` 仅适用于已确认的旧版记忆 Migration Unit；正常实施收尾必须先在
+  `MEMORY` 新增本轮 schema 2 短期记忆，再按“数量严格大于 max 才 distill”的滑动窗口门禁
+  检查，不能直接写入长期记忆
 - 对全部旧版短期按正文内容分拣业务候选、技术候选和不沉淀内容
 - 写入 `BUSINESS.md` / `TECHNICAL.md`
 - 更新 `MEMORY.md` 索引来源
@@ -85,7 +89,7 @@
 ## 迁移审计输出
 
 ```markdown
-[阶段：INIT]
+[阶段：IMPLEMENT]
 
 ### 旧版记忆迁移完成
 
@@ -97,11 +101,11 @@
 - 冲突处理：{旧内容淘汰 / 新内容生效 / 无冲突}
 - 淘汰检查：{删除 / 合并 / 淘汰摘要；未执行则写“未执行：无冲突或无重复主题”}
 
-将自动按新版记忆结构继续进入 ANALYSIS。
+将返回当前 IMPLEMENT，完成其余 Unit 后统一进入 QUALITY。
 ```
 
 ---
 
-## 返回 SKILL.md
+## 返回 IMPLEMENT
 
-迁移完成后，返回 `SKILL.md` 的输入发现与背景数据加载规则，按新版三文件记忆结构继续执行。
+迁移完成后返回 `flow/implement.md`，按新版三文件记忆结构完成剩余 Unit，再统一进入 QUALITY。

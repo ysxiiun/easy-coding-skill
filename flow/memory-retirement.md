@@ -1,6 +1,6 @@
 # 长期记忆淘汰策略
 
-> 本文件由 `SKILL.md` 在 `MEMORY` 冻结出 `candidate_files` 后按需加载执行。
+> 本文件由 `flow/memory.md` 在 MEMORY 冻结出 `candidate_files` 后按需加载执行。
 > 目标是定向清理冲突、重复和过期长期记忆，避免长期记忆膨胀和默认上下文污染。
 
 ---
@@ -85,6 +85,7 @@
 
 ---
 
-## 返回 SKILL.md
+## 返回 MEMORY
 
-淘汰检查完成后，返回 `SKILL.md` 的 `MEMORY` 规则，继续写入 `BUSINESS.md` / `TECHNICAL.md`、更新 `MEMORY.md` 索引并消费冻结候选。
+淘汰检查完成后，返回 `flow/memory.md`，继续写入 `BUSINESS.md` / `TECHNICAL.md`、更新
+`MEMORY.md` 索引并消费冻结候选。

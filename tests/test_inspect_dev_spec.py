@@ -164,10 +164,51 @@ class InspectDevSpecTest(unittest.TestCase):
             with self.assertRaisesRegex(SelectionError, "do not match"):
                 inspect_spec(VALID_FIXTURE, repo, ["R1-T1"], [f"R1={repo}"])
 
+    def test_current_remote_wins_over_an_existing_stale_path_hint(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory)
+            spec, current, _ = self._environment(parent)
+            old_parent = parent / "old-checkout"
+            old_parent.mkdir()
+            old, _ = create_repo(
+                old_parent,
+                "R1",
+                "git@example.com:demo/order-service.git",
+            )
+            text = spec.read_text(encoding="utf-8")
+            manifest = parse_manifest(text)
+            assert manifest is not None
+            next(
+                repository
+                for repository in manifest["repositories"]
+                if repository["repo_id"] == "R1"
+            )["path_hint"] = str(old)
+            spec.write_text(replace_manifest(text, manifest), encoding="utf-8")
+
+            result = inspect_manifest(spec, current)
+            match = result["repository_match"]
+            self.assertEqual(str(current.resolve()), match["repo_root"])
+            self.assertEqual("remote", match["method"])
+            self.assertEqual("different", match["path_hint_status"])
+
     def test_manifest_catalog_separates_design_and_execution_status(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             spec, r1, _ = self._environment(Path(directory))
-            result = inspect_manifest(spec, r1)
+            with patch(
+                "scripts.inspect_dev_spec.classify_baseline",
+                side_effect=AssertionError("manifest routing must not inspect baseline"),
+            ):
+                result = inspect_manifest(spec, r1)
+            self.assertEqual("manifest-only", result["inspection_mode"])
+            self.assertEqual("different", result["repository_match"]["path_hint_status"])
+            self.assertEqual(
+                {"R1"}, {task["repo_id"] for task in result["task_catalog"]}
+            )
+            for task in result["task_catalog"]:
+                self.assertEqual("not-inspected", task["baseline_status"])
+                self.assertNotIn("key_deliverables", task)
+                self.assertNotIn("change_paths", task)
+                self.assertNotIn("test_files", task)
             r1_t1 = next(task for task in result["task_catalog"] if task["task_id"] == "R1-T1")
             self.assertEqual("READY", r1_t1["status"])
             self.assertIsNone(r1_t1["execution_status"])
@@ -179,6 +220,50 @@ class InspectDevSpecTest(unittest.TestCase):
             )
             self.assertEqual("READY", r1_t1["status"])
             self.assertEqual("not_started", r1_t1["execution_status"])
+
+    def test_refresh_only_returns_execution_projection_without_scope_or_baseline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            spec, r1, _ = self._environment(Path(directory))
+            initialize_execution(
+                spec,
+                expected_design_sha256=design_sha256(spec.read_text(encoding="utf-8")),
+            )
+            formats: list[str] = []
+
+            def select_json_only(
+                source: object,
+                repo_id: str,
+                task_ids: list[str],
+                output_format: str = "markdown",
+            ) -> object:
+                formats.append(output_format)
+                return select_scope(
+                    source, repo_id, task_ids, output_format=output_format
+                )
+
+            with patch(
+                "scripts.inspect_dev_spec.classify_baseline",
+                side_effect=AssertionError("refresh must not inspect baseline"),
+            ), patch(
+                "scripts.inspect_dev_spec.select_scope",
+                side_effect=select_json_only,
+            ):
+                result = inspect_spec(
+                    spec,
+                    r1,
+                    ["R1-T2"],
+                    [],
+                    refresh_only=True,
+                )
+
+            self.assertEqual(["json"], formats)
+            self.assertEqual("refresh-only", result["inspection_mode"])
+            self.assertEqual("", result["scope_markdown"])
+            self.assertEqual({}, result["baseline_status"])
+            self.assertEqual("not-inspected", result["repositories"][0]["baseline_status"])
+            self.assertEqual(["R1-T2"], [item["task_id"] for item in result["selected_tasks"]])
+            execution_ids = {item["task_id"] for item in result["execution"]["tasks"]}
+            self.assertEqual({"R1-T1", "R1-T2", "R2-T1"}, execution_ids)
 
     def test_single_repo_scope_uses_upstream_digests_and_projection(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -434,6 +519,91 @@ class InspectDevSpecTest(unittest.TestCase):
             self.assertEqual(0, success.returncode, success.stderr or success.stdout)
             payload = json.loads(success.stdout)
             self.assertEqual(str(spec.resolve()), payload["source_path"])
+            self.assertEqual("selected", payload["inspection_mode"])
+
+            manifest_markdown = subprocess.run(
+                [
+                    "python3",
+                    "-B",
+                    str(SCRIPT),
+                    spec.name,
+                    "--repo-root",
+                    str(r1),
+                    "--manifest-only",
+                    "--format",
+                    "markdown",
+                ],
+                cwd=parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(
+                0,
+                manifest_markdown.returncode,
+                manifest_markdown.stderr or manifest_markdown.stdout,
+            )
+            self.assertIn("Baseline | Title", manifest_markdown.stdout)
+            self.assertIn("Inspection mode: `manifest-only`", manifest_markdown.stdout)
+            self.assertNotIn("Deliverables", manifest_markdown.stdout)
+
+            refresh = subprocess.run(
+                [
+                    "python3",
+                    "-B",
+                    str(SCRIPT),
+                    spec.name,
+                    "--repo-root",
+                    str(r1),
+                    "--task",
+                    "R1-T1",
+                    "--refresh-only",
+                ],
+                cwd=parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(0, refresh.returncode, refresh.stderr or refresh.stdout)
+            refresh_payload = json.loads(refresh.stdout)
+            self.assertEqual("refresh-only", refresh_payload["inspection_mode"])
+            self.assertEqual("", refresh_payload["scope_markdown"])
+
+            invalid_refresh = subprocess.run(
+                [
+                    "python3",
+                    "-B",
+                    str(SCRIPT),
+                    spec.name,
+                    "--repo-root",
+                    str(r1),
+                    "--refresh-only",
+                ],
+                cwd=parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(2, invalid_refresh.returncode)
+
+            legacy_refresh = subprocess.run(
+                [
+                    "python3",
+                    "-B",
+                    str(SCRIPT),
+                    str(LEGACY_FIXTURE),
+                    "--repo-root",
+                    str(r1),
+                    "--task",
+                    "R1-T1",
+                    "--refresh-only",
+                ],
+                cwd=parent,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(2, legacy_refresh.returncode)
+            self.assertEqual(
+                "CanonicalSpecError",
+                json.loads(legacy_refresh.stdout)["error_type"],
+            )
 
             selection_error = subprocess.run(
                 [
