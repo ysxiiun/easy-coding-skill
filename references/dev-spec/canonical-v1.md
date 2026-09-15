@@ -110,7 +110,10 @@ python3 <skill-dir>/scripts/update_dev_spec_execution.py sync-design <spec-path>
 
 1. ANALYSIS 生成并冻结 run ID、design/scope/依赖与实施投影，并在任何项目写入前用该 run ID
    创建质量 baseline；用户确认前不写 execution。
-2. 用户确认后先用确认的 scope/ignore 复核 baseline，要求 HEAD 和所有差异均未变化。
+2. 按 ANALYSIS 复核当前方案的有效确认，再按 `flow/implement.md` 第 1 节复核 baseline：
+   首次项目写入前要求 HEAD 和所有差异均未变化；已有写入的续流、修复或方案修订保留原
+   baseline，核对已有业务候选和 writer 证据。新方案的 scope/ignore 必须覆盖全部本轮候选，
+   旧方案的 QUALITY 证据失效，不得通过重建 baseline 吞掉先前改动。
 3. `show` 校验 design；无 execution 时 `init`，随后 task 写 `in_progress`。Canonical locator
    位于目标 repo 内时作为对应 repo 的机器 ignore；外部 locator 不传给 fingerprint，只保留
    writer/CAS 证据。然后实施业务代码/测试。此时不得写成功 Step 或 task

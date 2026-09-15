@@ -4,7 +4,14 @@
 
 ## 1. 进入与基线
 
-输出 `[阶段：IMPLEMENT]`，重读最终方案、相关规则、目标文件和 Local Baseline，复用 ANALYSIS
+在输出 IMPLEMENT 或任何项目写入前，先按 `flow/analysis.md` 第 5 节核对：当前完整方案的
+定位、方案展示之后的真实用户确认原话或实际选择结果，以及拟实施范围与批准范围的一致性。
+同一任务、同一方案的有效确认可沿用到续流与范围内 Repair Bundle；缺失、无法核实或因方案
+实质变化而失效时，保持或返回 `[阶段：ANALYSIS]`，补齐方案并等待确认。不得用任务启动
+指令、模型推断或基线检查通过代替用户确认。
+
+复核通过后，输出 `[阶段：IMPLEMENT]` 并简述确认依据（方案定位、用户原话或选择结果、
+范围一致结论），重读相关规则、目标文件和 Local Baseline，复用 ANALYSIS
 已经冻结的 `run_id=ec-skill-<UUIDv7>` 和当前 `quality_round`；不得在 IMPLEMENT 另生成 ID，
 也不得因同一 writer 调用重试而递增 round。
 
@@ -16,10 +23,19 @@ python3 <skill-dir>/scripts/quality_fingerprint.py baseline \
   --output <system-temp>/easy-coding-<run-id>-baseline.json
 ```
 
-输出必须位于所有仓库外。IMPLEMENT 在任何项目写入前先对该 baseline 运行 `capture`，使用
-确认的 scope/ignore，并要求 HEAD 未移动且 `changes`、`unexpected_changes`、`ignored_changes`
-都为空；否则停止并返回 ANALYSIS，刷新事实和 baseline。检查通过后复用该 baseline，不能把
-确认等待期间的改动静默吸收为候选。
+输出必须位于所有仓库外。进入实施前，对原 baseline 运行 `capture`，使用确认的 scope/ignore，
+按本轮是否已开始项目写入区分：
+
+- 首次项目写入前：要求 HEAD 未移动且 `changes`、`unexpected_changes`、`ignored_changes`
+  都为空；否则停止并返回 ANALYSIS，刷新事实和 baseline，不能把确认等待期间的改动静默
+  吸收为候选。
+- 已开始本轮项目写入的续流或范围内 Repair Bundle：保留原 baseline，要求 HEAD 未移动、
+  `unexpected_changes` 为空。已批准 Unit 的代码/测试候选和有 writer 证据的 ignore 变化
+  可以非空，包括仅完成 Canonical execution 写回、尚无业务候选的暂停恢复。已有 QUALITY
+  指纹、方案未修订，且该指纹之后没有本轮已记录写入时，先用该指纹核对候选；否则逐项核对已落地
+  Unit、Repair Bundle、writer 证据与当前 diff，不能把旧方案或修复前指纹当作当前通过证据。
+  无法解释的漂移先停止写入并核查，不能通过刷新 baseline 吸收已有候选。已确认的修订方案
+  同样保留原 baseline，按新 scope/ignore 覆盖本轮全部应交付或处理的候选。
 
 Canonical 任务同时读取 `references/dev-spec/canonical-v1.md`：方案确认后才初始化 execution，
 随后把 task 写为 `in_progress`。Canonical locator 位于某个目标 repo 内时才转为该 repo 的机器

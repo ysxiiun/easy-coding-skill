@@ -2,10 +2,10 @@
 name: easy-coding
 description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或要求加载 Easy Coding skill 时使用；已激活流程的确认续流可继续；若用户消息开头包含 `#no-coding`，当前轮跳过全部流程。提供固定 Guard 审批语义、固定 Standard 质量深度、项目知识与记忆，以及 easy-dev-spec/v1 Canonical 原文件共享执行。
 metadata:
-  version: 7.0.0
+  version: 7.0.1
 ---
 
-# Easy Coding 7.0.0
+# Easy Coding 7.0.1
 
 Easy Coding 是一个轻量、单入口的工程工作流。它只通过本 Skill 的渐进加载文件运行，不依赖
 Harness CLI、状态 API、Hooks、任务文件或平台运行时；双方可以共享项目知识、记忆和
@@ -17,7 +17,7 @@ Harness CLI、状态 API、Hooks、任务文件或平台运行时；双方可以
   “实现、修改、修复、需求”等表达不得隐式触发。
 - 用户消息开头包含 `#no-coding` 时，当前轮完全跳过本 Skill；下一轮恢复正常触发规则。
 - ANALYSIS 方案确认、QUALITY 结果确认和未完成 MEMORY 都属于已激活续流，
-  无需再次点名 Skill；包含新需求时不视为确认。
+  无需再次点名 Skill；确认回复中实质改变范围、契约或实施路线的内容，先作为方案修订处理。
 - 首轮先读取 `references/shared-data.md` 检查控制器标记。若项目由 Harness 管理，只读请求
   可以继续；任何项目修改任务必须停止，并引导用户改用 Harness。不得调用或修改其私有层。
 
@@ -47,6 +47,10 @@ ANALYSIS 可主动执行只读发现，并可在系统临时目录生成质量�
 Canonical execution、运行会生成项目产物的命令、格式化、提交、推送或发布。修改方案必须
 获得用户明确确认。
 
+“进行方案设计与开发”“修复这些问题”等任务启动指令，以及单独的范围选择或版本指定，
+不能批准随后才生成的方案。有效确认必须来自完整方案展示之后的真实用户回复或主动提交的
+原生选择结果，并对应当前方案；具体判定与等待行为以 `flow/analysis.md` 第 5 节为准。
+
 确认后允许：
 
 - 按确认范围修改业务代码和测试文件；
@@ -55,7 +59,8 @@ Canonical execution、运行会生成项目产物的命令、格式化、提交�
 - 在用户确认 QUALITY 结果后写入共享记忆。
 
 临时质量基线必须位于仓库外系统临时目录，并在 COMPLETE/CLOSED 清理；它不是项目资产。
-执行器状态、历史确认或审查结论不能替代当前用户确认。
+同一任务、同一方案的有效确认可在续流和范围内修复时沿用；其他任务或已失效方案的历史
+确认、执行器状态、审查结论和模型推断不能替代它。
 
 ## 4. 项目模式与初始化
 
@@ -91,13 +96,16 @@ Dev-Spec 总路由：显式路径是唯一 locator；未给路径时只列
 Legacy 才全文读取，Canonical 必须读取 `references/dev-spec/canonical-v1.md`。一轮只激活
 一份 Canonical，不生成 Harness 的派生任务产物。
 
-方案输出后保持 `[阶段：ANALYSIS]` 等待确认。修改意见必须形成替换后的完整方案；确认前
-不得进入 IMPLEMENT。
+完整方案输出后保持 `[阶段：ANALYSIS]`，只发起确认请求或结束回复。用户真实确认到达前
+不得进入 IMPLEMENT；无回复、未提交的默认选项、取消选择或超时均不构成确认。实质修改意见
+必须形成替换后的完整方案并重新等待确认。
 
 ## 6. IMPLEMENT
 
 用户确认完整方案后读取 `flow/implement.md`：
 
+- 在输出 IMPLEMENT 或首次项目写入前，核对当前方案、真实用户确认及范围一致性；缺失或
+  失效时保持 ANALYSIS，不得用任务启动指令补足确认；
 - 复用 ANALYSIS 已固定的 `run_id=ec-skill-<UUIDv7>`；
 - 复核并复用 ANALYSIS 创建的仓库外质量 baseline；
 - Canonical 任务先初始化 execution 并写 task `in_progress`；
@@ -144,6 +152,9 @@ Harness 私有层永不提交。
 优先级：
 
 `用户当前明确要求 > 已确认方案 > 当前代码/配置事实 > Dev-Spec > 固定 Spec > 记忆 > 默认建议`
+
+该优先级不能把任务启动指令、范围选择或方案修订意见转换为方案确认；确认仍按 ANALYSIS
+第 5 节核对。
 
 - 需求、契约或范围变化：停止旧路线，在 `[阶段：ANALYSIS]` 输出重置说明和完整新方案。
 - 范围内缺陷：聚合 Repair Bundle，返回 IMPLEMENT；不得借修复扩大范围。

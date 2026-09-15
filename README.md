@@ -1,12 +1,12 @@
 # Easy Coding Skill
 
-当前版本：`7.0.0`
+当前版本：`7.0.1`
 
-Easy Coding 是一个显式触发、轻量化、单入口的 AI 编程 Skill。7.0.0 固定采用 Guard 审批
+Easy Coding 是一个显式触发、轻量化、单入口的 AI 编程 Skill。7.0.1 固定采用 Guard 审批
 语义和 Standard 质量深度，不提供模式配置；核心目标是以最少运行时依赖提供方案确认、候选
 落地、独立审查、确定性验证、记忆和 Canonical 共享执行闭环。
 
-## 7.0.0 设计边界
+## 设计边界
 
 - 唯一入口：`$easy-coding`，内部通过 `SKILL.md` 渐进加载 flow/reference/template/script。
 - 不依赖 Harness CLI、状态 API、Hooks、session、task 或平台配置。
@@ -34,8 +34,10 @@ INIT → ANALYSIS → IMPLEMENT → QUALITY → MEMORY → COMPLETE
 - INIT 只读盘点项目模式、控制器标记和共享项目知识；缺失资产进入待确认的
   Initialization Unit，INIT 本身不写项目文件，盘点后自动进入 ANALYSIS。
 - ANALYSIS 发现真实上下文，输出确认范围、Implementation Unit、Local Baseline、精确验证命令
-  和 reviewer 关注点；方案在 ANALYSIS 内等待用户确认。
+  和 reviewer 关注点；方案展示后在 ANALYSIS 内等待真实用户确认。任务启动指令、单独选择
+  范围或版本不能批准随后生成的方案；无回复、空答案、取消选择、默认选项或超时均不放行。
 - IMPLEMENT 只落地确认范围内的代码和测试，并做范围/编码/注释自检；不运行确定性验证。
+  进入前先核对方案、用户确认来源及范围；同一方案的有效确认可沿用，实质修订后重新确认。
 - QUALITY 固定执行审查门和验证门。优先使用宿主原生独立 reviewer，不可用时由主代理按同一
   清单降级自审，并披露来源。
 - QUALITY 绿色后采用 Guard 结果确认；用户确认后才进入 MEMORY。
@@ -206,8 +208,14 @@ git diff --check
 
 语法检查完成后清理仓库外的 `easy-coding-pyc` 临时目录；不得把 `__pycache__` 写入项目。
 
+方案确认行为按 [对话验收案例](tests/plan-confirmation-cases.md) 在隔离项目中验证，检查实际
+回复、工具调用和文件变化。静态契约与结构校验只验证技能包约束，不能证明宿主实际拦截写入。
+
 ## 历史版本
 
+- `7.0.1`：明确方案确认的来源、顺序与适用范围，补齐 ANALYSIS 等待规则、IMPLEMENT 入口
+  复核及对话验收案例，修复把开发任务指令误当作方案确认的问题；已有写入后的续流、修复
+  和方案修订保留原基线，避免遗漏本轮先前改动。
 - `7.0.0`：删除联合协作功能，新增固定 QUALITY 双门、质量指纹、共享数据控制器边界、项目级
   TEST_STRATEGY 和 Git 交付纪律。
 - `6.0.0`：完成 Canonical 原文件单一消费闭包和受控 writer 重构；当时仍保留联合协作功能。

@@ -29,7 +29,7 @@ class SkillContractTest(unittest.TestCase):
     def test_main_skill_is_small_versioned_single_skill_router(self) -> None:
         skill = self._read("SKILL.md")
         self.assertLessEqual(len(skill.splitlines()), 500)
-        self.assertIn("version: 7.0.0", skill)
+        self.assertIn("version: 7.0.1", skill)
         self.assertIn("固定 Guard", skill)
         self.assertIn("固定 Standard", skill)
         for relative in ACTIVE_RULES[1:]:
@@ -163,10 +163,10 @@ class SkillContractTest(unittest.TestCase):
         self.assertIn("远端目标 SHA", git)
         self.assertIn("ahead/behind 为 `0/0`", git)
 
-    def test_docs_and_agent_metadata_match_7_0_0_contract(self) -> None:
+    def test_docs_and_agent_metadata_match_7_0_1_contract(self) -> None:
         readme = self._read("README.md")
         openai = self._read("agents/openai.yaml")
-        self.assertIn("当前版本：`7.0.0`", readme)
+        self.assertIn("当前版本：`7.0.1`", readme)
         self.assertIn("INIT 只读盘点项目模式", readme)
         self.assertNotIn("INIT 补齐共享项目知识", readme)
         self.assertIn("QUALITY", readme)

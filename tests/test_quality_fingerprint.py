@@ -154,6 +154,28 @@ class QualityFingerprintTests(unittest.TestCase):
         result = self._check(candidate["candidate_sha256"], "main:src", exit_code=3)
         self.assertIn("new out-of-scope changes", result["reasons"])
 
+    def test_scope_revision_preserves_earlier_candidate_and_requires_new_evidence(self) -> None:
+        (self.repo / "preexisting.txt").write_text("user work\n", encoding="utf-8")
+        self._baseline()
+        baseline_bytes = self.baseline_path.read_bytes()
+
+        (self.repo / "tracked.txt").write_text("first unit\n", encoding="utf-8")
+        first = self._capture("main:tracked.txt")
+        first_change = first["changes"][0]
+
+        (self.repo / "added.py").write_text("enabled = True\n", encoding="utf-8")
+        revised_scope = ("main:tracked.txt", "main:added.py")
+        revised = self._capture(*revised_scope)
+        changes = {item["path"]: item for item in revised["changes"]}
+
+        self.assertEqual({"tracked.txt", "added.py"}, set(changes))
+        self.assertEqual(first_change, changes["tracked.txt"])
+        self.assertEqual([], revised["unexpected_changes"])
+        self.assertEqual(baseline_bytes, self.baseline_path.read_bytes())
+        stale = self._check(first["candidate_sha256"], *revised_scope, exit_code=3)
+        self.assertIn("candidate drift", stale["reasons"])
+        self.assertEqual("match", self._check(revised["candidate_sha256"], *revised_scope)["status"])
+
     def test_head_movement_returns_exit_three(self) -> None:
         self._baseline()
         candidate = self._capture()
