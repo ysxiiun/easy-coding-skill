@@ -3,6 +3,10 @@
 > Dev-Spec 使用 `easy-dev-spec/v1` 时按需读取。Easy Coding 读取静态设计与共享 execution，
 > 只通过本 Skill writer 回写原 Markdown；不得创建可编辑副本或 Harness 派生任务产物。
 
+dispatch 中该 writer 仅由主 Agent 使用；编码 Agent 仍按 locator/选中 task 只读消费唯一闭包。
+主 Agent 在发出请求前完成当前 in_progress/修复重开，接回后负责以下 QUALITY 与 MEMORY 写回；
+交接保持同一 run ID 和原 quality_round，不因换 Agent 增加幂等轮次。
+
 ## 1. Locator、身份与单一消费闭包
 
 - 用户显式路径是唯一 locator；未给路径时才列 `.easy-coding/spec/dev/*.md` 文件名。

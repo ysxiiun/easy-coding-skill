@@ -4,11 +4,15 @@
 
 ## 1. 进入与基线
 
-在输出 IMPLEMENT 或任何项目写入前，先按 `flow/analysis.md` 第 5 节核对：当前完整方案的
+普通本地执行在输出 IMPLEMENT 或任何项目写入前，先按 `flow/analysis.md` 第 5 节核对：当前完整方案的
 定位、方案展示之后的真实用户确认原话或实际选择结果，以及拟实施范围与批准范围的一致性。
 同一任务、同一方案的有效确认可沿用到续流与范围内 Repair Bundle；缺失、无法核实或因方案
 实质变化而失效时，保持或返回 `[阶段：ANALYSIS]`，补齐方案并等待确认。不得用任务启动
 指令、模型推断或基线检查通过代替用户确认。
+
+交接执行者由 `references/dispatch.md` 第 3 节的 resume 进入本阶段，按返回的方案、授权出处、
+当前用户接手指令和候选复核续接，不重新加载 ANALYSIS。恢复的 run ID、quality_round、
+scope/work_scope 和原 baseline 是本轮入口；working 回执允许同一交接的部分实施恢复。
 
 复核通过后，输出 `[阶段：IMPLEMENT]` 并简述确认依据（方案定位、用户原话或选择结果、
 范围一致结论），重读相关规则、目标文件和 Local Baseline，复用 ANALYSIS
@@ -37,10 +41,12 @@ python3 <skill-dir>/scripts/quality_fingerprint.py baseline \
   无法解释的漂移先停止写入并核查，不能通过刷新 baseline 吸收已有候选。已确认的修订方案
   同样保留原 baseline，按新 scope/ignore 覆盖本轮全部应交付或处理的候选。
 
-Canonical 任务同时读取 `references/dev-spec/canonical-v1.md`：方案确认后才初始化 execution，
+Canonical 任务同时读取 `references/dev-spec/canonical-v1.md`：主 Agent 在方案确认后才初始化 execution，
 随后把 task 写为 `in_progress`。Canonical locator 位于某个目标 repo 内时才转为该 repo 的机器
 ignore；repo 外 locator 天然不在 Git 业务候选中，不传 `--ignore`。两种情况的设计摘要与
 execution revision 都由 writer 独立校验。
+交接执行者只按原 locator 和选中 task 只读消费、复核主 Agent 已完成的写回，不自行 init 或
+更新 execution；缺少必要状态时交回阻断。交接目录的 baseline 已由脚本绑定，不能重建。
 
 ## 2. 落地约束
 
@@ -78,7 +84,11 @@ execution revision 都由 writer 独立校验。
 
 ## 4. 进入 QUALITY
 
-全部 Unit 落地且实施自检通过后，输出候选文件摘要并自动读取 `flow/quality.md`。此处不等待
+先判断角色：交接执行者必须按协议 finish，展示实施摘要及脚本生成的返回提示词后停止，
+不得加载 QUALITY/MEMORY 或宣布整个任务完成。阻断同样交回主 Agent；next_action 为
+hand_back 时直接提供已有返回提示词，不能重复实施。
+
+普通本地执行全部 Unit 落地且实施自检通过后，输出候选文件摘要并自动读取 `flow/quality.md`。此处不等待
 用户确认，不写 Step `completed`、task `implemented/verified`，也不创建记忆。
 
 若任务没有任何项目文件候选变更，停止并解释原因；不能用空候选伪装完成。

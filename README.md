@@ -1,9 +1,9 @@
 # Easy Coding Skill
 
-当前版本：`7.0.1`
+当前版本：`7.1.0`
 
-Easy Coding 是一个显式触发、轻量化、单入口的 AI 编程 Skill。7.0.1 固定采用 Guard 审批
-语义和 Standard 质量深度，不提供模式配置；核心目标是以最少运行时依赖提供方案确认、候选
+Easy Coding 是一个显式触发、轻量化、单入口的 AI 编程 Skill。7.1.0 固定采用 Guard 审批
+语义和 Standard 质量深度，支持可选的本地人工 Dispatch；核心目标是以最少运行时依赖提供方案确认、候选
 落地、独立审查、确定性验证、记忆和 Canonical 共享执行闭环。
 
 ## 设计边界
@@ -38,6 +38,7 @@ INIT → ANALYSIS → IMPLEMENT → QUALITY → MEMORY → COMPLETE
   范围或版本不能批准随后生成的方案；无回复、空答案、取消选择、默认选项或超时均不放行。
 - IMPLEMENT 只落地确认范围内的代码和测试，并做范围/编码/注释自检；不运行确定性验证。
   进入前先核对方案、用户确认来源及范围；同一方案的有效确认可沿用，实质修订后重新确认。
+  交接执行者完成后生成回执和返回提示词并停止，主 Agent 接收后直接进入 QUALITY。
 - QUALITY 固定执行审查门和验证门。优先使用宿主原生独立 reviewer，不可用时由主代理按同一
   清单降级自审，并披露来源。
 - QUALITY 绿色后采用 Guard 结果确认；用户确认后才进入 MEMORY。
@@ -45,6 +46,44 @@ INIT → ANALYSIS → IMPLEMENT → QUALITY → MEMORY → COMPLETE
 - 显式中止进入 CLOSED，并清理仓库外临时 baseline。
 
 只读请求走 `ANALYSIS → COMPLETE`，不创建质量基线、候选指纹或记忆。
+
+## 可选的 Dispatch 人工协作
+
+由用户自行在本机 `~/.easy-coding/config.yaml` 配置，注意 `cooperate_mode` 位于 `behavior` 下：
+
+```yaml
+behavior:
+  cooperate_mode: dispatch
+```
+
+Skill 只读取该字段，不创建或修改配置，也不要求安装 Harness。字段/文件缺失或设为
+`default` 时使用原流程；配置使用以上块式 YAML，非法值或格式会明确报告。
+其他本地设置不会改变 Skill 固定的 Guard / Standard。已发出的有效交接不受默认值变更影响。
+
+启用后，完整方案展示后的选择变为：当前 Agent 执行、确认并转交其他 Agent、保持分析。
+只有选择转交才创建 `~/.easy-coding/skill-dispatch/<run_id>/`，保存请求、回执和原始质量基线
+三份文件；项目内不生成 task/session。主 Agent 分析、审查验证及沉淀，编码 Agent 只实施，
+双方在同机、同一组工作目录串行接力。Skill 不启动、切换或自动通知其他 Agent。
+
+主 Agent 会生成可直接复制的提示词，包含真实绝对路径和轮次，形式如下：
+
+```text
+使用 easy-coding 接手执行 <request.md绝对路径>，交接轮次 <N>；按已确认方案实施，完成后交回主 Agent。
+```
+
+用户复制到编码 Agent；实施完成后，编码 Agent 生成另一句提示，用户复制回原主 Agent：
+
+```text
+使用 easy-coding 接收 <result.md绝对路径>，交接轮次 <N>；继续审查与验证（阻断回执先处理阻断）。
+```
+
+接手直接进入 IMPLEMENT，主 Agent 接收完整结果直接进入 QUALITY，不重新分析或确认方案。
+修复包也可按相同方式转交，沿用原 run ID 和基线、递增交接轮次。重复提示按已保存进度恢复；
+旧轮次、错工作区或候选漂移会停止恢复，不会新建任务。暂停保留文件，完成或明确取消后清理。
+双方需安装支持本协议的 Skill 并能访问本地文件；共享目录不会自动授予沙箱写权限。
+
+详细收发协议按需加载 [Dispatch](references/dispatch.md)。默认模式不加载它；新会话恢复只
+读取当前请求、对应阶段与选中需求，不重读全套历史或未选中的 Canonical 任务。
 
 ## Standard QUALITY
 
@@ -180,6 +219,7 @@ easy-coding/
 │   └── coding/README.md
 ├── scripts/
 │   ├── quality_fingerprint.py
+│   ├── dispatch.py
 │   ├── inspect_dev_spec.py
 │   ├── update_dev_spec_execution.py
 │   ├── dev_spec_execution.py
@@ -210,9 +250,13 @@ git diff --check
 
 方案确认行为按 [对话验收案例](tests/plan-confirmation-cases.md) 在隔离项目中验证，检查实际
 回复、工具调用和文件变化。静态契约与结构校验只验证技能包约束，不能证明宿主实际拦截写入。
+Dispatch 另按 [交接验收案例](tests/dispatch-cases.md) 验证跨会话阶段和渐进加载，脚本单测不能
+替代真实代理对话轨迹。
 
 ## 历史版本
 
+- `7.1.0`：新增只读本地配置驱动的 Dispatch 人工交接、绑定路径/轮次的往返提示词与阶段
+  恢复；共享文件位于用户目录，复用原始质量基线，按角色渐进加载且保持 Guard / Standard。
 - `7.0.1`：明确方案确认的来源、顺序与适用范围，补齐 ANALYSIS 等待规则、IMPLEMENT 入口
   复核及对话验收案例，修复把开发任务指令误当作方案确认的问题；已有写入后的续流、修复
   和方案修订保留原基线，避免遗漏本轮先前改动。

@@ -8,8 +8,9 @@
 空仓库、近似空仓库、只有脚手架/构建配置，或主要输入为 Spec/Prototype 且没有稳定业务
 模块时，可判定为初创项目。已有稳定页面、接口、领域模型或持久化结构时按迭代项目处理。
 
-修改任务的 INIT 仍只读盘点并自动进入 ANALYSIS。不得跳过 INIT，也不得在首版 QUALITY 后回跳
-INIT；只读请求不进入本差异流程，保持 `ANALYSIS → COMPLETE`。
+普通新修改任务的 INIT 仍只读盘点并自动进入 ANALYSIS。不得跳过 INIT，也不得在首版 QUALITY
+后回跳 INIT；显式交接恢复沿用主 Agent 已完成的盘点，不重新进入 INIT/ANALYSIS。
+只读请求不进入本差异流程，保持 `ANALYSIS → COMPLETE`。
 
 ## 2. ANALYSIS 差异
 
@@ -28,7 +29,8 @@ INIT；只读请求不进入本差异流程，保持 `ANALYSIS → COMPLETE`。
 - 前端必须把 Prototype 映射到真实页面、组件、状态、数据和接口；mock 退出条件写入方案。
 - 业务代码/测试落地后执行 Initialization Unit，使 ABSTRACT/TEST_STRATEGY 基于真实候选。
 - 实施证明 Spec 契约或验收不可行时返回 ANALYSIS；Canonical 按设计修订契约处理。
-- 全部 Unit 自动进入 Standard QUALITY；共享资产与业务候选一起受审查、验证和指纹约束。
+- 全部 Unit 由主 Agent 进入 Standard QUALITY；交接执行者先按协议交回并停止。
+  共享资产与业务候选一起受审查、验证和指纹约束。
 
 ## 4. 完成语义
 

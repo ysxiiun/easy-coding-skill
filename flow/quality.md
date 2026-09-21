@@ -5,6 +5,11 @@
 
 ## 1. 冻结候选
 
+主 Agent 从交接回执进入时，先按 `references/dispatch.md` 第 4 节 resume，直接恢复本阶段，
+不用重新 INIT/ANALYSIS 或确认方案。沿用原 baseline、完整 scope/ignore 与恢复的 quality_round；
+编码方回执不是审查或测试通过证据。若恢复检查点已经是 MEMORY/COMPLETE，按该阶段续接，
+不因旧回执重跑本阶段。阶段内已完成 Gate 的证据只在当前候选一致且实际证据可核对时复用。
+
 输出 `[阶段：QUALITY]`。使用 ANALYSIS 创建、IMPLEMENT 写入前复核通过的 baseline，以及确认
 方案中的 scope/ignore：
 
@@ -80,6 +85,12 @@ Repair Bundle 必须一次列全：严重度、文件/位置、原因、修复�
 task `blocked`；恢复修改时同样先递增 round。环境阻断不改变候选时保持当前 round。
 修复完成重新 capture，旧 candidate SHA 和旧 Gate 证据作废。
 
+dispatch 下完整展示 Repair Bundle 后，一次选择“当前 Agent 修复 / 确认并转交修复 / 暂缓”。
+同一范围的原方案授权沿用，执行者选择只做一次。主 Agent 完成上述 Canonical 阻断/重开后，
+按交接协议 send 下一轮 repair；普通代码修复仍返回 IMPLEMENT，不引入 QUALITY 内编码路线。
+本地修复若已有交接目录，先 checkpoint IMPLEMENT；修复后 checkpoint QUALITY。接收修复回执
+直接回本阶段；实质范围/契约变化才 checkpoint ANALYSIS 并重新分析。
+
 ## 3. 验证门
 
 审查门通过且指纹 `check` 为 0 后，按 ANALYSIS 的精确计划执行：
@@ -97,6 +108,8 @@ task `blocked`；恢复修改时同样先递增 round。环境阻断不改变候
 - 非阻断建议：记录剩余风险。
 
 所有命令保留退出码和简洁结果。完成后再次 `check`，确保验证未改变候选或产生范围外文件。
+有交接目录时，每个 Gate 完成后记录当前 QUALITY 检查点，保存候选绑定证据和下一步；不记录
+历史流水，不把缺失证据补写成通过。
 
 ## 4. Canonical QUALITY 时序
 
@@ -135,3 +148,5 @@ CAS、事件证据与状态必须成功。
 输出后立即停止。有原生选择工具时提供“确认 QUALITY 结果（推荐）”与“保持 QUALITY”；用户
 反馈缺陷时按分类路由，不能把反馈直接当确认。确认后 Canonical task 先写 `verified`，再读取
 `flow/memory.md`。
+存在交接目录时，在 Canonical verified 写回成功后按协议 checkpoint MEMORY，保存真实用户
+结果确认和当前双门证据，再加载 MEMORY。转交实施的授权不能代替本次 QUALITY 结果确认。

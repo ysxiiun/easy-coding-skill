@@ -18,6 +18,8 @@
 | `flow/init.md` | 项目初始化流程 |
 | `flow/git.md` | 单 Skill Git 纪律与交付证明 |
 | `references/shared-data.md` | 与 Harness 的共享/私有数据边界 |
+| `references/dispatch.md` | 按需加载的本地人工交接、角色停止点与阶段恢复协议 |
+| `scripts/dispatch.py` | 配置读取、共享回执、精确绑定与恢复检查点 |
 | `references/dev-spec/canonical-v1.md` | Canonical 原文件消费与共享 execution 契约 |
 | `templates/` | SOUL/RULES/ABSTRACT/TEST_STRATEGY/MEMORY/CHANGELOG 模板 |
 
@@ -28,7 +30,7 @@
 - 阶段标注格式：`[阶段：XXXX]`（中文冒号）
 - 合法阶段：INIT / ANALYSIS / IMPLEMENT / QUALITY / MEMORY / COMPLETE / CLOSED
 - 修改主链：INIT → ANALYSIS → IMPLEMENT → QUALITY → MEMORY → COMPLETE；方案确认留在 ANALYSIS，结果确认留在 QUALITY
-- 固定采用 Guard 审批语义与 Standard 质量深度，不提供模式入口；审查/验证统一属于 QUALITY
+- 固定采用 Guard 审批语义与 Standard 质量深度；只读本地协作偏好可开启 Dispatch，审查/验证统一属于 QUALITY
 - 版本号规则：第一位=重大功能更新，第二位=新功能或新优化迭代，第三位=Bug 修复
 - 若用户消息开头包含 `#no-coding`，则该轮跳过 easy-coding 全部流程与约束，下一轮恢复正常
 - Easy Coding 与 Harness 互相替代；不得依赖 Harness 运行时或生成私有任务产物，只共享项目知识、记忆、Canonical Markdown 原文件及 `EDS:EXECUTION`

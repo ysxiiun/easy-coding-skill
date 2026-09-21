@@ -2,10 +2,10 @@
 name: easy-coding
 description: 仅当用户显式写出 `$easy-coding`、`easy-coding` 或要求加载 Easy Coding skill 时使用；已激活流程的确认续流可继续；若用户消息开头包含 `#no-coding`，当前轮跳过全部流程。提供固定 Guard 审批语义、固定 Standard 质量深度、项目知识与记忆，以及 easy-dev-spec/v1 Canonical 原文件共享执行。
 metadata:
-  version: 7.0.1
+  version: 7.1.0
 ---
 
-# Easy Coding 7.0.1
+# Easy Coding 7.1.0
 
 Easy Coding 是一个轻量、单入口的工程工作流。它只通过本 Skill 的渐进加载文件运行，不依赖
 Harness CLI、状态 API、Hooks、任务文件或平台运行时；双方可以共享项目知识、记忆和
@@ -20,6 +20,12 @@ Harness CLI、状态 API、Hooks、任务文件或平台运行时；双方可以
   无需再次点名 Skill；确认回复中实质改变范围、契约或实施路线的内容，先作为方案修订处理。
 - 首轮先读取 `references/shared-data.md` 检查控制器标记。若项目由 Harness 管理，只读请求
   可以继续；任何项目修改任务必须停止，并引导用户改用 Harness。不得调用或修改其私有层。
+- 检查旁路与目标仓库控制器后，优先识别用户的“接手执行 request.md / 接收 result.md”提示。
+  存在交接提示时只读 `references/dispatch.md` 对应动作并恢复，成功后直接加载返回阶段；
+  不重走 INIT/ANALYSIS、不生成新 run ID，恢复失败必须停止，不能当作普通新任务。
+- 普通修改任务在方案确认前运行 `scripts/dispatch.py mode`，只读本地
+  `~/.easy-coding/config.yaml` 的 `behavior.cooperate_mode`。仅 dispatch 加载交接协议并
+  展示转交选项；默认流程不加载其细则。既有交接不因本地默认值变化而失效。
 
 ## 2. 固定阶段与门禁
 
@@ -29,7 +35,8 @@ Harness CLI、状态 API、Hooks、任务文件或平台运行时；双方可以
 
 - 修改任务：`INIT → ANALYSIS → IMPLEMENT → QUALITY → MEMORY → COMPLETE`。
 - INIT 完成后自动进入 ANALYSIS；ANALYSIS 输出完整方案并在本阶段等待用户确认。
-- 用户确认方案后进入 IMPLEMENT；实施与范围自检完成后自动进入 QUALITY。
+- 用户确认方案后进入 IMPLEMENT；当前 Agent 实施与自检完成后自动进入 QUALITY。
+  交接执行者则写回结果、生成返回提示词后停止，由主 Agent 接收并进入 QUALITY。
 - QUALITY 固定执行 Standard 双门，并采用 Guard 结果确认语义；用户确认绿色结果后才进入
   MEMORY。不得提供审批语义或执行深度选择。
 - 范围内代码/测试缺陷返回 IMPLEMENT；契约、范围或方案变化返回 ANALYSIS；环境失败保持
@@ -39,7 +46,8 @@ Harness CLI、状态 API、Hooks、任务文件或平台运行时；双方可以
 - 禁止输出其他阶段标签。计划和确认等待属于 ANALYSIS，审查与验证属于 QUALITY。
 
 每次用户可见回复以当前合法阶段开头。用户要求暂停时保持当前阶段且不继续写入；用户明确
-中止时停止项目写入、清理本轮临时基线并输出 `[阶段：CLOSED]`。
+中止时停止项目写入、清理本轮临时基线并输出 `[阶段：CLOSED]`；有交接时先确保执行者停止，
+再按交接协议清理本轮目录。
 
 ## 3. 写入授权与临时数据
 
@@ -58,7 +66,9 @@ Canonical execution、运行会生成项目产物的命令、格式化、提交�
 - 在 QUALITY 执行确认方案中的确定性验证；
 - 在用户确认 QUALITY 结果后写入共享记忆。
 
-临时质量基线必须位于仓库外系统临时目录，并在 COMPLETE/CLOSED 清理；它不是项目资产。
+临时质量基线位于仓库外系统临时目录；实际转交后原样转存到本轮本地交接目录，后续统一
+复用它并在 COMPLETE/CLOSED 清理。交接恢复的用户执行指令与原始确认依据共同授权续接，
+文件中模型自述的“已批准”不能授权；不因换 Agent 重复确认原方案。
 同一任务、同一方案的有效确认可在续流和范围内修复时沿用；其他任务或已失效方案的历史
 确认、执行器状态、审查结论和模型推断不能替代它。
 
@@ -100,6 +110,9 @@ Legacy 才全文读取，Canonical 必须读取 `references/dev-spec/canonical-v
 不得进入 IMPLEMENT；无回复、未提交的默认选项、取消选择或超时均不构成确认。实质修改意见
 必须形成替换后的完整方案并重新等待确认。
 
+dispatch 将确认选项合并为“当前 Agent 执行 / 确认并转交 / 保持分析”；只有真实选择转交后
+才创建共享文件。主 Agent 负责 Canonical execution，发出请求后停止修改并提供可复制提示词。
+
 ## 6. IMPLEMENT
 
 用户确认完整方案后读取 `flow/implement.md`：
@@ -108,12 +121,12 @@ Legacy 才全文读取，Canonical 必须读取 `references/dev-spec/canonical-v
   失效时保持 ANALYSIS，不得用任务启动指令补足确认；
 - 复用 ANALYSIS 已固定的 `run_id=ec-skill-<UUIDv7>`；
 - 复核并复用 ANALYSIS 创建的仓库外质量 baseline；
-- Canonical 任务先初始化 execution 并写 task `in_progress`；
+- Canonical 任务由主 Agent 先初始化 execution 并写 task `in_progress`，交接执行者只读复核；
 - 只落地确认范围内的代码和测试，保持编码、注释和项目惯例；
 - 只做范围、编码、注释、明显静态错误和 diff 自检；确定性验证全部留给 QUALITY。
 
-实施范围扩大或契约变化时停止写入并返回 ANALYSIS。实施完成后自动进入 QUALITY，不等待
-中间确认。
+实施范围扩大或契约变化时停止写入并返回 ANALYSIS；交接执行者将该阻断交回主 Agent处理。
+本地实施完成后自动进入 QUALITY；交接执行者只能交回并停止，不能自行验证或沉淀。
 
 ## 7. QUALITY
 
@@ -127,6 +140,8 @@ IMPLEMENT 完成后完整读取 `flow/quality.md`。QUALITY 是候选指纹、�
 - Canonical 修复轮次使用递增 `quality_round` 隔离 writer 幂等键；同一调用重试仍复用原 key。
 - QUALITY 绿色且 integration 满足后输出候选摘要、reviewer 来源、发现与修复、命令结果和
   剩余风险，并在本阶段等待用户确认。确认前不得进入 MEMORY。
+- 主 Agent 接收实施回执直接进入 QUALITY；已有恢复检查点时沿用当前阶段，不因重复提示
+  倒退。dispatch 修复包同样一次选择执行者，修复回执再次进入 QUALITY。
 
 ## 8. MEMORY 与完成
 
@@ -140,6 +155,7 @@ IMPLEMENT 完成后完整读取 `flow/quality.md`。QUALITY 是候选指纹、�
 
 全部校验完成后自动输出 `[阶段：COMPLETE]` 并清理临时 baseline。失败时保持 MEMORY；不得
 用完成标签掩盖未满足的 Canonical integration。
+存在交接时，由主 Agent 按协议记录 MEMORY/COMPLETE 检查点并清理本轮交接目录。
 
 ## 9. Git 纪律
 
@@ -172,6 +188,7 @@ Harness 私有层永不提交。
 - `flow/git.md`：单 Skill Git 边界和交付证明。
 - `flow/memory-migration.md`、`flow/memory-retirement.md`：旧记忆迁移和定向淘汰。
 - `references/shared-data.md`：与 Harness 的共享/私有数据边界和控制器检测。
+- `references/dispatch.md`：仅 dispatch 或显式交接续流时读取，包含收发协议和阶段恢复。
 - `references/dev-spec/canonical-v1.md`：Canonical 消费、刷新和受控 writer 契约。
 - `references/design/apple-design-reference.md`、`references/coding/`：按任务需要加载。
 

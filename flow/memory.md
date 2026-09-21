@@ -4,6 +4,10 @@
 
 ## 1. 进入与短期检查点
 
+只有主 Agent 进入本阶段。交接恢复返回 MEMORY 时，复核已保存的 QUALITY 结果确认、证据及
+当前记忆进度，继续未完成动作，不重新分析、不重复创建已落地的短期记忆。存在交接目录时，
+每个已完成记忆动作的真实路径和窗口进度写入该请求的 MEMORY 检查点，以便中断恢复。
+
 输出 `[阶段：MEMORY]`。复用本轮固定 `run_id=ec-skill-<UUIDv7>`，读取
 `templates/SHORT_MEMORY.md`，新建一条 schema 2 短期记忆：
 
@@ -54,7 +58,8 @@ MEMORY 回执列出短期文件、run ID、candidate SHA、窗口总数/action�
 
 ## 5. COMPLETE
 
-全部校验后清理仓库外 baseline，再输出：
+全部校验后，存在交接目录时先按协议 checkpoint COMPLETE（含真实 memory_ref），再 cleanup
+当前目录；不单独提前删 baseline，以免清理失去绑定。无交接时清理原仓库外 baseline，再输出：
 
 ```markdown
 [阶段：COMPLETE]

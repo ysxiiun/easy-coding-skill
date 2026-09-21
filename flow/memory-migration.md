@@ -101,11 +101,12 @@
 - 冲突处理：{旧内容淘汰 / 新内容生效 / 无冲突}
 - 淘汰检查：{删除 / 合并 / 淘汰摘要；未执行则写“未执行：无冲突或无重复主题”}
 
-将返回当前 IMPLEMENT，完成其余 Unit 后统一进入 QUALITY。
+将返回当前 IMPLEMENT，完成其余 Unit 后由主 Agent 进入 QUALITY；交接执行者先交回并停止。
 ```
 
 ---
 
 ## 返回 IMPLEMENT
 
-迁移完成后返回 `flow/implement.md`，按新版三文件记忆结构完成剩余 Unit，再统一进入 QUALITY。
+迁移完成后返回 `flow/implement.md`，按新版三文件记忆结构完成剩余 Unit；主 Agent 随后进入
+QUALITY，交接执行者按该文件的角色停止点交回，不自动验证。
