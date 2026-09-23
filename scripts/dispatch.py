@@ -13,8 +13,10 @@ from pathlib import Path
 
 if __package__:
     from . import quality_fingerprint as quality
+    from . import quality_checks
 else:
     import quality_fingerprint as quality
+    import quality_checks
 
 
 SCHEMA = "easy-coding-dispatch/v1"
@@ -245,6 +247,16 @@ def send(args: argparse.Namespace) -> dict:
     require(type(quality_round) is int and quality_round > 0, "quality_round must be positive")
     original, _ = quality._load_baseline(args.baseline)
     current = snapshot(original, args.scope, args.ignore)
+    checks_path = path.parent / "checks.json"
+    checks_source = None
+    if args.checks:
+        checks_source = quality._validate_output_path(Path(args.checks),
+                                                     (Path(repo["root"]) for repo in current["repositories"]))
+        require(checks_source.is_file(), "check store is missing")
+        quality_checks.load_store(checks_source, file_digest(original))
+        require(not checks_path.exists() or checks_source == checks_path
+                or checks_source.read_bytes() == checks_path.read_bytes(),
+                "cannot replace existing handoff check evidence")
     require(all(not path.parent.resolve().is_relative_to(Path(repo["root"]))
                 for repo in current["repositories"]), "handoff must remain outside repositories")
     if path.exists():
@@ -279,10 +291,13 @@ def send(args: argparse.Namespace) -> dict:
         path.parent.mkdir(parents=True, exist_ok=True)
         if not (path.parent / "baseline.json").exists():
             atomic_write(path.parent / "baseline.json", original.read_text(encoding="utf-8"))
+        if checks_source and checks_source != checks_path and not checks_path.exists():
+            atomic_write(checks_path, checks_source.read_text(encoding="utf-8"))
         write_document(path, data, body)
         (path.parent / "result.md").unlink(missing_ok=True)
     return {"applied": args.apply, "request": str(path), "request_sha256": data["request_sha256"],
-            "baseline": str(path.parent / "baseline.json"), "prompt": prompt(path, args.round, False)}
+            "baseline": str(path.parent / "baseline.json"), "checks": str(checks_path),
+            "prompt": prompt(path, args.round, False)}
 
 
 def resume(args: argparse.Namespace) -> dict:
@@ -339,6 +354,7 @@ def resume(args: argparse.Namespace) -> dict:
     return {"applied": args.apply, "role": args.role, "stage": stage, "next_action": action,
             "outcome": outcome, "run_id": frozen["run_id"], "round": args.round,
             "quality_round": checkpoint["quality_round"], "baseline": str(path.parent / "baseline.json"),
+            "checks": str(path.parent / "checks.json"),
             "repositories": [{"id": repo["id"], "root": repo["root"]} for repo in baseline["repositories"]],
             "scope": context["scope"], "ignore": context["ignore"],
             "work_scope": frozen["work_scope"] if args.role == "executor" else context["scope"],
@@ -434,7 +450,7 @@ def cleanup(args: argparse.Namespace) -> dict:
         require(memory_business_digest(current) == data["checkpoint"].get("memory_business_sha256"),
                 "business candidate changed before cleanup")
     children = list(path.parent.iterdir())
-    require(all(item.name in {"request.md", "result.md", "baseline.json"}
+    require(all(item.name in {"request.md", "result.md", "baseline.json", "checks.json"}
                 and item.is_file() and not item.is_symlink() for item in children),
             "unexpected files in handoff directory; refuse recursive cleanup")
     if args.apply:
@@ -457,6 +473,7 @@ def parser() -> argparse.ArgumentParser:
         if name == "send":
             command.add_argument("--run-id", required=True)
             command.add_argument("--baseline", required=True)
+            command.add_argument("--checks", help="carry existing input-bound checks into the handoff")
             command.add_argument("--scope", action="append", required=True)
             command.add_argument("--ignore", action="append", default=[])
             command.add_argument("--work-scope", action="append")

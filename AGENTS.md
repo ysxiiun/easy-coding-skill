@@ -20,6 +20,7 @@
 | `references/shared-data.md` | 与 Harness 的共享/私有数据边界 |
 | `references/dispatch.md` | 按需加载的本地人工交接、角色停止点与阶段恢复协议 |
 | `scripts/dispatch.py` | 配置读取、共享回执、精确绑定与恢复检查点 |
+| `references/quality-checks.md` / `scripts/quality_checks.py` | 仓库外单项检查输入与证据复用，不管理任务阶段 |
 | `references/dev-spec/canonical-v1.md` | Canonical 原文件消费与共享 execution 契约 |
 | `templates/` | SOUL/RULES/ABSTRACT/TEST_STRATEGY/MEMORY/CHANGELOG 模板 |
 

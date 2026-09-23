@@ -8,8 +8,10 @@
    立即停止并引导使用 Harness。
 2. 读取用户需求、显式文件、截图、链接和已确认决定。
 3. 读取真实代码、构建配置、直接调用链和相关测试。
-4. 按需读取共享 `SOUL.md`、`RULES.md`、`ABSTRACT.md`、`TEST_STRATEGY.md`、长期索引、
-   命中主题及全部有效短期记忆。
+4. 按需读取共享 `SOUL.md`、`RULES.md`、`ABSTRACT.md`、`TEST_STRATEGY.md` 和长期索引。
+   短期记忆先检索 frontmatter 和知识摘要，仅展开 domain/tags/related_files/前置关系命中的
+   内容；`memory_value: none` 不进入知识检索。旧记忆只读取命中的业务/技术结论，用户追溯
+   历史时才展开验收过程。不因“最近几条”或记忆仍有效就全部加载。
 5. 读取固定 Spec、Prototype 和用户选择的 Dev-Spec；Prototype 只用于理解，不直接成为
    生产实现。
 6. 记录每个目标仓库 HEAD、预存 staged/unstaged/untracked 状态、文件编码和构建入口。
@@ -31,6 +33,9 @@ Migration Unit，并引用 `flow/init.md` / `flow/memory-migration.md`。这些 
 - 已有实现必须追到真实文件、直接调用链和测试；不存在时明确写“空项目/脚手架”。
 - 提示词、Spec、代码和记忆有冲突时，列出差异、影响与建议，等待用户决策。
 - 不添加没有依据的兼容、兜底、重试、迁移或一次性抽象。
+- 优先沿用同模块、同职责的最近邻代码惯例；只在正确性、明确需求或项目硬规则要求时偏离。
+  不为行数、形式上的复用或通用最佳实践规划拆方法、提常量、防御性复制或重复内部校验。
+- 复用本轮已核实的发现；无新证据时不重复扫描仓库、重读未变上下文或扩大分析范围。
 - Canonical 只生成一份 task/Step/change/Test 实施投影，不叠加第二套普通设计。
 
 ## 3. Implementation Unit 与 Local Baseline
@@ -40,7 +45,9 @@ Migration Unit，并引用 `flow/init.md` / `flow/memory-migration.md`。这些 
 - 目标行为和明确不做项；
 - 精确文件、符号和测试范围；
 - 前置依赖、输入输出和完成条件；
-- 对应验证命令与 reviewer 关注点。
+- 对应验证命令、实际输入闭包与 reviewer 关注点。输入闭包含源码、测试、公共依赖、构建配置，
+  以及实际工作目录、工具链和相关环境变量；不明确时覆盖受影响模块与依赖，不猜测单文件闭包。
+  具体描述符和复用规则按需读取 `references/quality-checks.md`。
 
 修改任务进入本节时先生成一次 `run_id=ec-skill-<UUIDv7>` 并冻结到当前需求；baseline 文件名、
 Canonical writer 事件和短期记忆必须复用它。同一任务内的方案修订或重置保持同一 run ID；
@@ -71,7 +78,8 @@ Local Baseline 必须列出：
 - 本轮已开始项目写入：保留原 run ID、baseline 和预存改动边界。新方案必须列明本轮已落地
   候选中继续保留、调整或撤回的内容，并将全部仍需交付或处理的候选纳入确认范围；确认前
   不自行撤回或遗留旧方案改动。旧 QUALITY 指纹与结论不再作为新方案的通过证据；确认后
-  使用原 baseline 和新 scope/ignore 继续实施，再对全部候选重新审查、验证。
+  使用原 baseline 和新 scope/ignore 继续实施，重新评估全部候选的检查覆盖；按实际输入复用
+  仍有效的单项结果，只补变化合同或受影响输入的审查、验证，不把旧 GREEN 直接作为新通过。
 
 已有写入后若原 baseline 丢失、HEAD 移动或仓库范围变化导致其无法复用，保持 ANALYSIS，
 先核实恢复路径；不得用当前工作区重建 baseline，把本轮已有候选变成预存改动。
@@ -124,6 +132,7 @@ Local Baseline 必须列出：
 - test：{精确受影响命令与预期}
 - build：{契约/配置/项目规则要求的命令，或不适用及依据}
 - 人工验收：{用户可观察结果}
+- 检查输入：{稳定检查 ID、对应 Unit、源码/测试/依赖/配置、cwd、工具链、相关环境}
 
 ### 风险与剩余限制
 - {风险、环境限制和缓解}

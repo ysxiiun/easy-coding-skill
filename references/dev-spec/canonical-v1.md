@@ -40,7 +40,8 @@ python3 <skill-dir>/scripts/inspect_dev_spec.py <spec-path> \
 
 - `document_sha256/source_sha256`：完整文件诊断摘要，execution 更新会改变。
 - `design_sha256`：去除 execution 后的完整静态设计，作为 writer CAS。
-- `design_scope_sha256`：当前 repo/task 静态闭包，变化时旧方案和质量证据失效并回 ANALYSIS。
+- `design_scope_sha256`：当前 repo/task 静态闭包，变化时旧方案和整体质量结论失效并回 ANALYSIS；
+  单项检查按更新后的合同/输入判断复用。
 - `execution_revision`：共享状态 CAS；`execution_scope_sha256`：当前 task/依赖执行投影。
 - execution-only 变化只用 refresh 更新，不重新加载正文或重做静态方案。
 
@@ -117,7 +118,8 @@ python3 <skill-dir>/scripts/update_dev_spec_execution.py sync-design <spec-path>
 2. 按 ANALYSIS 复核当前方案的有效确认，再按 `flow/implement.md` 第 1 节复核 baseline：
    首次项目写入前要求 HEAD 和所有差异均未变化；已有写入的续流、修复或方案修订保留原
    baseline，核对已有业务候选和 writer 证据。新方案的 scope/ignore 必须覆盖全部本轮候选，
-   旧方案的 QUALITY 证据失效，不得通过重建 baseline 吞掉先前改动。
+   旧方案的整体 QUALITY 结论不能直接沿用，单项检查按实际输入判断复用；不得通过重建
+   baseline 吞掉先前改动。
 3. `show` 校验 design；无 execution 时 `init`，随后 task 写 `in_progress`。Canonical locator
    位于目标 repo 内时作为对应 repo 的机器 ignore；外部 locator 不传给 fingerprint，只保留
    writer/CAS 证据。然后实施业务代码/测试。此时不得写成功 Step 或 task
@@ -127,7 +129,8 @@ python3 <skill-dir>/scripts/update_dev_spec_execution.py sync-design <spec-path>
    缺陷直接把 task 写 `blocked`，不能越过 writer 前置条件强写 Step。进入 Repair Bundle 前
    递增 round，再重开 task 为 `in_progress`；下一轮用新 candidate 重写全部 Step 成功证据。
 5. 双门绿色且 candidate 未漂移后，按前置顺序把 Step 写 `completed`；每个 Step 携带所有绑定
-   Test 的 passed 证据及 candidate SHA。全部 Step 完成后 task 写 `implemented`。
+   Test 的 passed 证据及当前 candidate SHA。按检查输入复用的结果同时引用原 input SHA 与
+   命令/结果，不伪装为重新执行；全部 Step 完成后 task 写 `implemented`。
 6. refresh integration。integration 未满足时保持 QUALITY/`implemented`，不展示 Guard 结果确认。
 7. integration 满足时展示 QUALITY 绿色结果；用户确认后 task 写 `verified`，进入 MEMORY。
 8. MEMORY 检查点和窗口动作成功后，重新校验并把 task 写 `completed`。

@@ -39,11 +39,12 @@ INIT → ANALYSIS → IMPLEMENT → QUALITY → MEMORY → COMPLETE
 - IMPLEMENT 只落地确认范围内的代码和测试，并做范围/编码/注释自检；不运行确定性验证。
   进入前先核对方案、用户确认来源及范围；同一方案的有效确认可沿用，实质修订后重新确认。
   交接执行者完成后生成回执和返回提示词并停止，主 Agent 接收后直接进入 QUALITY。
-- QUALITY 固定执行审查门和验证门。优先使用宿主原生独立 reviewer，不可用时由主代理按同一
-  清单降级自审，并披露来源。
+- QUALITY 固定执行审查门和验证门。未参与当前范围编码的主 Agent 可承担独立审查；否则
+  优先使用宿主原生独立 reviewer，不可用时按同一清单自审，并披露来源。
 - QUALITY 绿色后采用 Guard 结果确认；用户确认后才进入 MEMORY。
-- MEMORY 创建质量证据完整的短期记忆，执行 max 10 / keep 5 冻结窗口，成功后 COMPLETE。
-- 显式中止进入 CLOSED，并清理仓库外临时 baseline。
+- MEMORY 创建以可复用知识为主、保留最小质量追溯的短期记忆，执行 max 10 / keep 5 冻结窗口，
+  成功后 COMPLETE。
+- 显式中止进入 CLOSED，并清理仓库外临时 baseline 和本轮检查存储。
 
 只读请求走 `ANALYSIS → COMPLETE`，不创建质量基线、候选指纹或记忆。
 
@@ -62,7 +63,8 @@ Skill 只读取该字段，不创建或修改配置，也不要求安装 Harness
 
 启用后，完整方案展示后的选择变为：当前 Agent 执行、确认并转交其他 Agent、保持分析。
 只有选择转交才创建 `~/.easy-coding/skill-dispatch/<run_id>/`，保存请求、回执和原始质量基线
-三份文件；项目内不生成 task/session。主 Agent 分析、审查验证及沉淀，编码 Agent 只实施，
+三份基础文件，QUALITY 按需增加 checks.json 保存单项检查结果；项目内不生成 task/session。
+主 Agent 分析、审查验证及沉淀，编码 Agent 只实施，
 双方在同机、同一组工作目录串行接力。Skill 不启动、切换或自动通知其他 Agent。
 
 主 Agent 会生成可直接复制的提示词，包含真实绝对路径和轮次，形式如下：
@@ -93,8 +95,8 @@ Skill 只读取该字段，不创建或修改配置，也不要求安装 Harness
    临时 JSON。
 2. QUALITY 通过 `capture` 计算范围内业务候选，并单列机器 ignore 与意外范围外变化；候选
    摘要同时绑定 HEAD 和确认的 scope/ignore。
-3. 每个 Gate 后通过 `check --expected` 重算；HEAD 移动、候选漂移或新增范围外变化都会使
-   本轮证据失效。
+3. 每个 Gate 后通过 `check --expected` 重算；HEAD 移动、候选漂移或新增范围外变化都会阻止
+   沿用当前整体 GREEN。单项检查结果保留，修复后按实际输入重新判断是否复用。
 4. 审查发现分为 `code-defect`、`test-defect`、`contract-ambiguity`、`environment`、
    `suggestion`。前两类聚合为一次 Repair Bundle。
 5. 验证门执行方案中的受影响 lint/typecheck/test，以及契约、构建配置或项目规则要求的
@@ -104,6 +106,15 @@ Skill 只读取该字段，不创建或修改配置，也不要求安装 Harness
 相对 baseline 不变时不会阻断。脏 gitlink 必须把对应子仓作为独立 `--repo` 纳入，否则脚本
 拒绝建立候选；Gate 期间才出现的未覆盖脏 gitlink 由 `check` 按漂移返回 3。
 未跟踪 nested Git repo 也必须作为独立 `--repo` 纳入，不能只指纹父目录。
+
+`scripts/quality_checks.py` 为单项审查/验证绑定实际输入：源码、测试、公共依赖、配置、
+命令、cwd、工具链和相关环境。批量 prepare 只复用输入一致的最新通过；record 拒绝执行期间
+漂移和退出码矛盾，真实失败必须登记。一个组合命令能覆盖多项检查时只执行一次。缓存只在
+仓库外保存，缺失时补必要检查，不依赖 Harness 运行时，也不改变 IMPLEMENT 修复路由。
+详情与 CLI 示例见 [检查输入与证据复用](references/quality-checks.md)。
+
+编码和审查沿用最近邻惯例，不为固定行数、通用最佳实践或形式上的复用要求拆方法、提常量、
+重复判空、防御性复制或无关清理。首轮完整报告范围内问题，修复轮只审增量及直接影响。
 
 ## 与 Harness 的共享数据
 
@@ -164,7 +175,11 @@ workflow_mode: standard
 producer: easy-coding-skill
 ```
 
-短期正文还记录 candidate SHA、reviewer 来源、发现/修复、验证证据、用户确认与剩余风险。
+短期正文优先记录知识摘要、适用场景、业务语义、设计原因、修改入口与真实踩坑，并引用来源；
+无新增知识明确设置 `memory_value: none` / `target_long: NONE`，不拼凑经验。Skill 没有持久
+任务日志，因此文末仍保留 candidate SHA、reviewer 来源、必要验证结果和用户确认等最小追溯，
+不能只引用完成后会被删除的临时文件。分析时先检索元数据与知识摘要，仅展开命中内容，跳过
+无新增知识记录；旧验收过程只在需要追溯时读取，历史记忆和用户模板不批量重写。
 窗口固定 max 10 / keep 5，只有数量严格大于 10 才 distill。长期沉淀时才评估架构；只有模块
 边界、依赖方向、核心数据流、技术栈、构建或部署变化才更新 ABSTRACT 和 CHANGELOG。
 
@@ -214,11 +229,14 @@ easy-coding/
 │   └── memory-retirement.md
 ├── references/
 │   ├── shared-data.md
+│   ├── quality-checks.md
+│   ├── dispatch.md
 │   ├── dev-spec/canonical-v1.md
 │   ├── design/apple-design-reference.md
 │   └── coding/README.md
 ├── scripts/
 │   ├── quality_fingerprint.py
+│   ├── quality_checks.py
 │   ├── dispatch.py
 │   ├── inspect_dev_spec.py
 │   ├── update_dev_spec_execution.py
@@ -256,7 +274,8 @@ Dispatch 另按 [交接验收案例](tests/dispatch-cases.md) 验证跨会话阶
 ## 历史版本
 
 - `7.1.0`：新增只读本地配置驱动的 Dispatch 人工交接、绑定路径/轮次的往返提示词与阶段
-  恢复；共享文件位于用户目录，复用原始质量基线，按角色渐进加载且保持 Guard / Standard。
+  恢复；补充知识型记忆与按需检索、非代码作者主 Agent 独立审查、最小改动规则和按实际输入
+  复用检查结果，保持 Guard / Standard 与原 IMPLEMENT 修复路由。
 - `7.0.1`：明确方案确认的来源、顺序与适用范围，补齐 ANALYSIS 等待规则、IMPLEMENT 入口
   复核及对话验收案例，修复把开发任务指令误当作方案确认的问题；已有写入后的续流、修复
   和方案修订保留原基线，避免遗漏本轮先前改动。

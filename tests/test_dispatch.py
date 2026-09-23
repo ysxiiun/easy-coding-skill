@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts import dispatch
+from scripts import quality_checks
 from scripts import quality_fingerprint as quality
 
 
@@ -92,6 +93,46 @@ class DispatchTests(unittest.TestCase):
         self.resume()
         (self.repo / "a.txt").write_text("implemented\n")
         self.finish()
+
+    def check_call(self, command, store, payload, baseline=None):
+        output = io.StringIO()
+        with patch.object(sys, "stdin", io.StringIO(json.dumps(payload))), contextlib.redirect_stdout(output):
+            code = quality_checks.main([command, "--baseline", str(baseline or self.original),
+                                        "--store", str(store), "--apply"])
+        self.assertEqual(0, code)
+        return json.loads(output.getvalue())["checks"][0]
+
+    def test_checks_survive_handoff_and_local_repair_then_cleanup(self):
+        self.configure()
+        store = self.root / "checks.json"
+        descriptor = {"id": "b-test", "type": "verify", "inputs": {"main": ["b.txt"]},
+                      "command": "python3 -c 'pass'", "toolchain": [sys.executable]}
+        prepared = self.check_call("prepare", store, [descriptor])
+        self.check_call("record", store, [{"id": "b-test", "prepared_id": prepared["prepared_id"],
+                                           "passed": True, "exit_code": 0, "summary": "b passed"}])
+        original_bytes = store.read_bytes()
+        sent = self.send(extra=("--checks", store))
+        transferred = Path(sent["checks"])
+        self.assertEqual(original_bytes, transferred.read_bytes())
+        self.assertEqual("IMPLEMENT", self.resume()["stage"])
+        (self.repo / "a.txt").write_text("changed a\n")
+        self.finish()
+        self.assertEqual("QUALITY", self.resume("coordinator")["stage"])
+        self.checkpoint("IMPLEMENT")
+        (self.repo / "a.txt").write_text("repaired a\n")
+        self.checkpoint("QUALITY")
+        reused = self.check_call("prepare", transferred, [descriptor], self.directory / "baseline.json")
+        self.assertTrue(reused["reusable"])
+        self.run_cli("cleanup", "--path", self.request, "--round", 1, "--cancelled", "--apply")
+        self.assertFalse(transferred.exists())
+        self.assertTrue(store.exists())
+
+    def test_foreign_check_store_is_rejected_before_handoff_writes(self):
+        self.configure()
+        store = self.root / "checks.json"
+        store.write_text(json.dumps({"schema": quality_checks.SCHEMA, "baseline_sha256": "foreign", "checks": {}}))
+        self.send(extra=("--checks", store), error="different baseline")
+        self.assertFalse(self.directory.exists())
 
     def test_mode_missing_and_default_are_read_only(self):
         self.assertEqual("default", self.run_cli("mode")["cooperate_mode"])

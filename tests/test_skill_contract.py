@@ -19,6 +19,7 @@ ACTIVE_RULES = (
     "flow/memory-retirement.md",
     "references/shared-data.md",
     "references/dispatch.md",
+    "references/quality-checks.md",
     "references/dev-spec/canonical-v1.md",
 )
 

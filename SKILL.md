@@ -66,8 +66,8 @@ Canonical execution、运行会生成项目产物的命令、格式化、提交�
 - 在 QUALITY 执行确认方案中的确定性验证；
 - 在用户确认 QUALITY 结果后写入共享记忆。
 
-临时质量基线位于仓库外系统临时目录；实际转交后原样转存到本轮本地交接目录，后续统一
-复用它并在 COMPLETE/CLOSED 清理。交接恢复的用户执行指令与原始确认依据共同授权续接，
+临时质量基线和按需检查存储位于仓库外系统临时目录；实际转交后原样转存到本轮本地交接
+目录，后续统一复用并在 COMPLETE/CLOSED 清理。交接恢复的用户执行指令与原始确认依据共同授权续接，
 文件中模型自述的“已批准”不能授权；不因换 Agent 重复确认原方案。
 同一任务、同一方案的有效确认可在续流和范围内修复时沿用；其他任务或已失效方案的历史
 确认、执行器状态、审查结论和模型推断不能替代它。
@@ -98,8 +98,10 @@ Canonical execution、运行会生成项目产物的命令、格式化、提交�
 - 用户确认范围和明确不做项；
 - 可独立实施、审查和验证的 Implementation Unit；
 - Local Baseline（仓库 HEAD、预存脏改动和候选范围）；
-- 精确 lint/typecheck/test/build 命令及预期；
+- 精确 lint/typecheck/test/build 命令、预期及实际输入闭包；
 - 独立审查关注点、Canonical 映射和剩余风险。
+
+项目知识按命中范围渐进读取；短期记忆先检索元数据和知识摘要，不默认加载全部近期记录。
 
 Dev-Spec 总路由：显式路径是唯一 locator；未给路径时只列
 `.easy-coding/spec/dev/*.md` 候选名。先运行 `scripts/inspect_dev_spec.py --manifest-only`；
@@ -133,10 +135,11 @@ dispatch 将确认选项合并为“当前 Agent 执行 / 确认并转交 / 保�
 IMPLEMENT 完成后完整读取 `flow/quality.md`。QUALITY 是候选指纹、独立审查、确定性验证、
 修复路由和 Guard 结果确认的唯一权威来源。
 
-- 审查门优先使用一个宿主原生独立 reviewer；不可用或调用失败时，主代理按同一清单自审，
-  无需额外询问。最终必须披露 reviewer 来源。
+- 审查门先核对代码作者：未参与当前范围编码的主 Agent 可以独立审查；否则优先使用宿主
+  原生独立 reviewer，不可用时按同一清单自审。最终披露 reviewer 来源。
 - 验证门执行方案中的受影响 lint/typecheck/test，以及契约、构建配置或项目规则要求的 build。
-- 两门使用同一 `candidate_sha256`；Gate 期间项目文件漂移会使证据失效并返回 IMPLEMENT。
+- 两门汇总到同一当前 `candidate_sha256`；Gate 期间漂移仍返回 IMPLEMENT。通过
+  `scripts/quality_checks.py` 按实际输入复用有效单项结果，不因修复整体清空证据。
 - Canonical 修复轮次使用递增 `quality_round` 隔离 writer 幂等键；同一调用重试仍复用原 key。
 - QUALITY 绿色且 integration 满足后输出候选摘要、reviewer 来源、发现与修复、命令结果和
   剩余风险，并在本阶段等待用户确认。确认前不得进入 MEMORY。
@@ -148,12 +151,13 @@ IMPLEMENT 完成后完整读取 `flow/quality.md`。QUALITY 是候选指纹、�
 用户确认 QUALITY 绿色结果后读取 `flow/memory.md`：
 
 - 先创建一条 schema 2、UUIDv7 ID 的短期记忆；`source_task` 与本轮 run ID 完全一致；
-- 记录候选指纹、reviewer 来源、验证证据和用户确认；
+- 以知识摘要、适用场景、可复用结论和来源为主，文末保留最小质量追溯；无新增知识明确标记
+  `memory_value: none`，不拼凑经验或重复分析；
 - 默认固定窗口为 max 10 / keep 5，仅当短期数量严格大于 max 时 distill；
 - 只有长期沉淀时才做有界架构评估，并按条件更新 ABSTRACT 与 CHANGELOG；
 - Canonical task 在 MEMORY 成功后才写 `completed`。
 
-全部校验完成后自动输出 `[阶段：COMPLETE]` 并清理临时 baseline。失败时保持 MEMORY；不得
+全部校验完成后自动输出 `[阶段：COMPLETE]` 并清理临时 baseline 和检查存储。失败时保持 MEMORY；不得
 用完成标签掩盖未满足的 Canonical integration。
 存在交接时，由主 Agent 按协议记录 MEMORY/COMPLETE 检查点并清理本轮交接目录。
 
@@ -189,6 +193,7 @@ Harness 私有层永不提交。
 - `flow/memory-migration.md`、`flow/memory-retirement.md`：旧记忆迁移和定向淘汰。
 - `references/shared-data.md`：与 Harness 的共享/私有数据边界和控制器检测。
 - `references/dispatch.md`：仅 dispatch 或显式交接续流时读取，包含收发协议和阶段恢复。
+- `references/quality-checks.md`：分析检查输入或执行 QUALITY 时加载，规定逐项证据复用与清理。
 - `references/dev-spec/canonical-v1.md`：Canonical 消费、刷新和受控 writer 契约。
 - `references/design/apple-design-reference.md`、`references/coding/`：按任务需要加载。
 

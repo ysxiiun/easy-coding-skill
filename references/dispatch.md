@@ -66,6 +66,8 @@ JSON
 - 初次派发前已经做过本轮修改时才设 `implementation_started: true`，plan 必须说明已有
   候选与剩余 Unit。不能用它吸收未知改动或替代确认。
 - 暂存 JSON 可经 stdin 输入；若使用 `--input <file>`，输入文件只放系统临时目录并及时清理。
+- 初次转交前已有本轮检查存储时传 `--checks <原checks.json绝对路径>`，脚本校验其 baseline
+  归属并原样转存。后续统一使用返回的 `checks` 路径；没有存储时不创建空文件。
 
 只有返回 `applied: true` 才将 `prompt` 原样展示给用户，提示复制到编码 Agent。
 提示词包含真实 request.md 绝对路径与轮次，明确授权执行该已确认方案；不用用户手工补参数。
@@ -120,7 +122,8 @@ PYTHONDONTWRITEBYTECODE=1 python3 <skill-dir>/scripts/dispatch.py resume \
 首次完整结果直接输出 `[阶段：QUALITY]`，读取 QUALITY，按原 baseline 和当前候选执行
 审查与验证；不能再次输出 INIT/ANALYSIS 或索取方案确认。阻断回执按返回 stage 处理阻断。
 检查点已存在则恢复该阶段与已记录证据，不能因旧回执再次进入实施、重复记忆或阶段倒退。
-证据缺失时在当前阶段补齐；旧候选的绿色证据不能用于新候选。
+证据缺失时在当前阶段补齐；旧候选的整体绿色结论不能直接用于新候选，单项检查按
+`references/quality-checks.md` 重新判断输入是否一致，引用仍有效的原结果。
 
 主 Agent 完成一项质量门、准备本地修复/重规划、获得结果确认或完成记忆时更新最小检查点：
 
@@ -133,8 +136,9 @@ JSON
 
 只保留当前恢复必需的事实，不积累历史日志。检查点不代替 QUALITY 双门或实际用户确认。
 
-- 本地修复前 checkpoint IMPLEMENT；修复后 checkpoint QUALITY 并重新审查验证。旧质量
-  证据随修复失效。再次转交则直接按第 2 节 send 下一轮，不再创建另一套方案。
+- 本地修复前 checkpoint IMPLEMENT；修复后 checkpoint QUALITY 并重建当前候选汇总，
+  按实际输入复用未受影响检查，只审修复增量与直接影响。再次转交则直接按第 2 节 send
+  下一轮，不再创建另一套方案，也不删除 checks.json。
 - 真实契约/范围变化 checkpoint ANALYSIS；主 Agent 重新展示并确认替换方案，保留原基线。
   若选择本地实施，checkpoint IMPLEMENT 的 JSON 增加 `revision`，包含替换后的 `plan`、
   `authorization`、完整 run 的 `scope` 和 `ignore`。恢复只输出该当前方案；原交接 frozen
@@ -148,12 +152,14 @@ JSON
 
 ## 5. 文件边界与清理
 
-仅保存 `~/.easy-coding/skill-dispatch/<run_id>/{request.md,result.md,baseline.json}`：
+仅保存 `~/.easy-coding/skill-dispatch/<run_id>/` 中以下基础文件及按需检查存储：
 
 - request.md：结构化 frozen 请求及摘要、独立 coordinator checkpoint、确认方案正文。
 - result.md：working/implemented/blocked 状态、对应请求摘要、候选指纹与实施摘要。
 - baseline.json：原始基线的字节一致转存，不按接手时工作区重建。转存成功后主 Agent 可清理
   本轮旧临时基线，并在后续各阶段统一使用目录内的 baseline；脚本不会删除任意输入路径。
+- checks.json：仅主 Agent 使用的本轮检查输入与最新结果，QUALITY 按需生成；已有存储通过
+  `send --checks` 转存。复用原 baseline，跨交接/修复轮保留，不记录阶段或审批状态。
 
 正文与 frozen 共同确定请求摘要；检查点更新不改变摘要。回执绑定 run ID、轮次和请求摘要。
 同轮 frozen 不可编辑，下一轮覆盖当前请求/回执，不保存历史轮次文件。
@@ -168,5 +174,6 @@ PYTHONDONTWRITEBYTECODE=1 python3 <skill-dir>/scripts/dispatch.py cleanup \
 ```
 
 用户明确取消时先确保编码 Agent 已停止，再以 `--cancelled --apply` 清理并输出 CLOSED。
-只删除已识别的三个文件与当前目录；有额外文件或符号链接时停止清理并报告。
+只删除上述已识别文件与当前目录；有额外文件或符号链接时停止清理并报告。原临时检查存储
+若已转存，由主 Agent 核对后清理原文件，不能在最终记忆中仅保留会被删除的路径。
 不得清理其他 run、Harness config 或业务文件。目录已清理的旧提示词只能报告无法恢复。

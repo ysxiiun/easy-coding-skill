@@ -22,7 +22,7 @@ execution 只能由本 Skill 自带 writer 原地更新；普通 Harness 任务�
 
 另允许只读用户主目录 `~/.easy-coding/config.yaml` 的 `behavior.cooperate_mode`，用于识别
 人工交接偏好。它与下面仓库内的私有 config 不是同一文件；不继承其他行为设置，不调用
-Harness CLI。Skill 自有的 `~/.easy-coding/skill-dispatch/<run_id>/` 只保存按需交接文件，
+Harness CLI。Skill 自有的 `~/.easy-coding/skill-dispatch/<run_id>/` 只保存按需交接文件和检查结果，
 不属于 Harness 私有任务，也不构成项目管理标记。
 
 ## 2. Harness 私有层
